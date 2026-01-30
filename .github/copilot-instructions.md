@@ -1,1 +1,0 @@
-I am using the latest version of React 19.2, TanStack Query, TanStack Router, Zustand, TypeScript, TailwindCSS 4.1, Shadcn UI, Base UI (alternative for the Radix UI), Vite, Vitest, React Hook Form, Zod 4, Hey Api (@hey-api/openapi-ts), and lucide icons in this project.
