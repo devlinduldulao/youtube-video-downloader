@@ -1,6 +1,46 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unsafe-function-type */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from '@/app/api/download/route';
 import { NextRequest } from 'next/server';
+import { PassThrough } from 'stream';
+
+// Mock ffmpeg
+vi.mock('fluent-ffmpeg', () => {
+  const mockFfmpeg: any = vi.fn(() => {
+    const mockCommand = {
+      input: vi.fn().mockReturnThis(),
+      inputFormat: vi.fn().mockReturnThis(),
+      outputOptions: vi.fn().mockReturnThis(),
+      format: vi.fn().mockReturnThis(),
+      on: vi.fn(function(this: any, event: string, handler: Function) {
+        if (event === 'end') {
+          setTimeout(() => handler(), 10);
+        }
+        return this;
+      }),
+      pipe: vi.fn((stream: PassThrough) => {
+        setTimeout(() => {
+          stream.write(Buffer.from('merged video data'));
+          stream.end();
+        }, 10);
+        return stream;
+      }),
+      kill: vi.fn(),
+    };
+    return mockCommand;
+  });
+  
+  mockFfmpeg.setFfmpegPath = vi.fn();
+  
+  return { default: mockFfmpeg };
+});
+
+// Mock @ffmpeg-installer/ffmpeg
+vi.mock('@ffmpeg-installer/ffmpeg', () => ({
+  default: { path: '/usr/bin/ffmpeg' },
+}));
 
 // Mock ytdl-core
 vi.mock('@distube/ytdl-core', () => {
@@ -18,34 +58,48 @@ vi.mock('@distube/ytdl-core', () => {
       ],
     },
     formats: [
-      {
-        itag: 22,
-        qualityLabel: '720p',
-        hasVideo: true,
-        hasAudio: true,
-        height: 720,
-        width: 1280,
-      },
-      {
-        itag: 18,
-        qualityLabel: '360p',
-        hasVideo: true,
-        hasAudio: true,
-        height: 360,
-        width: 640,
-      },
+      // Video-only formats
       {
         itag: 137,
         qualityLabel: '1080p',
         hasVideo: true,
-        hasAudio: true,
+        hasAudio: false,
         height: 1080,
         width: 1920,
+      },
+      {
+        itag: 136,
+        qualityLabel: '720p',
+        hasVideo: true,
+        hasAudio: false,
+        height: 720,
+        width: 1280,
+      },
+      {
+        itag: 135,
+        qualityLabel: '480p',
+        hasVideo: true,
+        hasAudio: false,
+        height: 480,
+        width: 854,
+      },
+      // Audio-only formats
+      {
+        itag: 140,
+        hasVideo: false,
+        hasAudio: true,
+        audioBitrate: 128,
+      },
+      {
+        itag: 139,
+        hasVideo: false,
+        hasAudio: true,
+        audioBitrate: 48,
       },
     ],
   }));
   
-  const mockYtdl = vi.fn((url: string, options: any) => {
+  const mockYtdl: any = vi.fn((url: string, options: any) => {
     const mockStream = {
       on: vi.fn((event: string, handler: Function) => {
         if (event === 'data') {
@@ -132,20 +186,26 @@ describe('Download API Route', () => {
       },
       formats: [
         {
-          itag: 22,
+          itag: 136,
           qualityLabel: '720p',
           hasVideo: true,
-          hasAudio: true,
+          hasAudio: false,
           height: 720,
           width: 1280,
         },
         {
-          itag: 18,
-          qualityLabel: '360p',
+          itag: 135,
+          qualityLabel: '480p',
           hasVideo: true,
+          hasAudio: false,
+          height: 480,
+          width: 854,
+        },
+        {
+          itag: 140,
+          hasVideo: false,
           hasAudio: true,
-          height: 360,
-          width: 640,
+          audioBitrate: 128,
         },
       ],
     } as any);
@@ -176,20 +236,26 @@ describe('Download API Route', () => {
       },
       formats: [
         {
-          itag: 18,
+          itag: 135,
+          qualityLabel: '480p',
+          hasVideo: true,
+          hasAudio: false,
+          height: 480,
+          width: 854,
+        },
+        {
+          itag: 134,
           qualityLabel: '360p',
           hasVideo: true,
-          hasAudio: true,
+          hasAudio: false,
           height: 360,
           width: 640,
         },
         {
-          itag: 17,
-          qualityLabel: '144p',
-          hasVideo: true,
+          itag: 140,
+          hasVideo: false,
           hasAudio: true,
-          height: 144,
-          width: 256,
+          audioBitrate: 128,
         },
       ],
     } as any);
@@ -237,12 +303,18 @@ describe('Download API Route', () => {
       },
       formats: [
         {
-          itag: 22,
+          itag: 136,
           qualityLabel: '720p',
           hasVideo: true,
-          hasAudio: true,
+          hasAudio: false,
           height: 720,
           width: 1280,
+        },
+        {
+          itag: 140,
+          hasVideo: false,
+          hasAudio: true,
+          audioBitrate: 128,
         },
       ],
     } as any);

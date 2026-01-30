@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ytdl from '@distube/ytdl-core';
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import { PassThrough } from 'stream';
+
+// Set ffmpeg path
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,53 +30,91 @@ export async function POST(request: NextRequest) {
     const info = await ytdl.getInfo(url);
     const title = info.videoDetails.title.replace(/[^\w\s-]/g, '');
     
-    // Get formats with both video and audio
-    const formats = info.formats.filter(format => format.hasVideo && format.hasAudio);
-    
-    // Prioritize 1080p, then 720p, then highest available
-    const preferredQualities = ['1080p', '720p'];
-    let selectedFormat = formats.find(format => 
-      preferredQualities.some(quality => format.qualityLabel?.includes(quality))
+    // Get best video-only format
+    const videoFormats = info.formats.filter(
+      format => format.hasVideo && !format.hasAudio
     );
-    
-    // If no preferred quality found, select highest quality format
-    if (!selectedFormat) {
-      selectedFormat = formats.sort((a, b) => {
-        const heightA = a.height || 0;
-        const heightB = b.height || 0;
-        return heightB - heightA;
-      })[0];
+    const videoFormat = videoFormats.sort((a, b) => {
+      const heightA = a.height || 0;
+      const heightB = b.height || 0;
+      return heightB - heightA;
+    })[0];
+
+    // Get best audio-only format
+    const audioFormats = info.formats.filter(
+      format => format.hasAudio && !format.hasVideo
+    );
+    const audioFormat = audioFormats.sort((a, b) => {
+      const bitrateA = a.audioBitrate || 0;
+      const bitrateB = b.audioBitrate || 0;
+      return bitrateB - bitrateA;
+    })[0];
+
+    if (!videoFormat || !audioFormat) {
+      return NextResponse.json(
+        { error: 'No suitable video/audio formats found' },
+        { status: 500 }
+      );
     }
-    
+
+    // Create video and audio streams
+    const videoStream = ytdl(url, { format: videoFormat });
+    const audioStream = ytdl(url, { format: audioFormat });
+
+    // Create output stream for merged video
+    const outputStream = new PassThrough();
+
+    // Merge video and audio using ffmpeg
+    const ffmpegProcess = ffmpeg()
+      .input(videoStream)
+      .inputFormat('mp4')
+      .input(audioStream)
+      .inputFormat('webm')
+      .outputOptions([
+        '-c:v copy',      // Copy video codec (no re-encoding)
+        '-c:a aac',       // Convert audio to AAC
+        '-movflags frag_keyframe+empty_moov' // Enable streaming
+      ])
+      .format('mp4')
+      .on('error', (error) => {
+        console.error('FFmpeg error:', error);
+        outputStream.destroy(error);
+      })
+      .on('end', () => {
+        console.log('FFmpeg processing finished');
+      });
+
+    // Pipe ffmpeg output to our output stream
+    ffmpegProcess.pipe(outputStream, { end: true });
+
     // Set headers for download
     const headers = new Headers();
     headers.set('Content-Disposition', `attachment; filename="${title}.mp4"`);
     headers.set('Content-Type', 'video/mp4');
 
-    // Create stream with selected quality
-    const videoStream = ytdl(url, {
-      format: selectedFormat,
-    });
-
-    // Convert stream to Response
-    const stream = new ReadableStream({
+    // Convert Node.js stream to Web ReadableStream
+    const webStream = new ReadableStream({
       start(controller) {
-        videoStream.on('data', (chunk) => {
+        outputStream.on('data', (chunk) => {
           controller.enqueue(chunk);
         });
 
-        videoStream.on('end', () => {
+        outputStream.on('end', () => {
           controller.close();
         });
 
-        videoStream.on('error', (error) => {
+        outputStream.on('error', (error) => {
           console.error('Stream error:', error);
           controller.error(error);
         });
       },
+      cancel() {
+        outputStream.destroy();
+        ffmpegProcess.kill('SIGKILL');
+      }
     });
 
-    return new NextResponse(stream, { headers });
+    return new NextResponse(webStream, { headers });
   } catch (error) {
     console.error('Download error:', error);
     return NextResponse.json(

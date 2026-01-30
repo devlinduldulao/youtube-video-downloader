@@ -320,7 +320,7 @@ export function DownloadPage() {
                                                 {videoInfo.title}
                                             </h2>
                                             <p className="text-muted-foreground font-mono text-sm">
-                                                AUTHOR: {videoInfo.author.toUpperCase()} // ID: {videoInfo.videoId}
+                                                AUTHOR: {videoInfo.author.toUpperCase()} / ID: {videoInfo.videoId}
                                             </p>
                                         </div>
                                     </div>

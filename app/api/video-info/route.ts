@@ -22,23 +22,15 @@ export async function POST(request: NextRequest) {
     const info = await ytdl.getInfo(url);
     const videoDetails = info.videoDetails;
     
-    // Get formats with both video and audio (same logic as download route)
-    const formats = info.formats.filter(format => format.hasVideo && format.hasAudio);
-    
-    // Prioritize 1080p, then 720p, then highest available
-    const preferredQualities = ['1080p', '720p'];
-    let selectedFormat = formats.find(format => 
-      preferredQualities.some(quality => format.qualityLabel?.includes(quality))
+    // Get best video-only format (same logic as download route)
+    const videoFormats = info.formats.filter(
+      format => format.hasVideo && !format.hasAudio
     );
-    
-    // If no preferred quality found, select highest quality format
-    if (!selectedFormat) {
-      selectedFormat = formats.sort((a, b) => {
-        const heightA = a.height || 0;
-        const heightB = b.height || 0;
-        return heightB - heightA;
-      })[0];
-    }
+    const selectedFormat = videoFormats.sort((a, b) => {
+      const heightA = a.height || 0;
+      const heightB = b.height || 0;
+      return heightB - heightA;
+    })[0];
 
     const thumbnails = videoDetails.thumbnails;
     // Get best thumbnail

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from '@/app/api/video-info/route';
 import { NextRequest } from 'next/server';
@@ -20,33 +22,39 @@ vi.mock('@distube/ytdl-core', () => {
     },
     formats: [
       {
-        itag: 22,
+        itag: 137,
+        qualityLabel: '1080p',
+        hasVideo: true,
+        hasAudio: false,
+        height: 1080,
+        width: 1920,
+      },
+      {
+        itag: 136,
         qualityLabel: '720p',
         hasVideo: true,
-        hasAudio: true,
+        hasAudio: false,
         height: 720,
         width: 1280,
       },
       {
-        itag: 18,
-        qualityLabel: '360p',
+        itag: 135,
+        qualityLabel: '480p',
         hasVideo: true,
-        hasAudio: true,
-        height: 360,
-        width: 640,
+        hasAudio: false,
+        height: 480,
+        width: 854,
       },
       {
-        itag: 137,
-        qualityLabel: '1080p',
-        hasVideo: true,
+        itag: 140,
+        hasVideo: false,
         hasAudio: true,
-        height: 1080,
-        width: 1920,
+        audioBitrate: 128,
       },
     ],
   }));
   
-  const mockYtdl = vi.fn();
+  const mockYtdl: any = vi.fn();
   mockYtdl.validateURL = mockValidateURL;
   mockYtdl.getInfo = mockGetInfo;
   
@@ -128,7 +136,7 @@ describe('Video Info API Route', () => {
     expect(data.thumbnail).toBe('https://i.ytimg.com/vi/test123/maxresdefault.jpg');
   });
 
-  it('should prioritize 1080p or 720p quality label', async () => {
+  it('should prioritize highest video quality', async () => {
     const request = new NextRequest('http://localhost:3000/api/video-info', {
       method: 'POST',
       body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=test123' }),
@@ -137,8 +145,8 @@ describe('Video Info API Route', () => {
     const response = await POST(request);
     const data = await response.json();
 
-    // Should return either 1080p or 720p (preferred qualities)
-    expect(['1080p', '720p']).toContain(data.quality);
+    // Should return the highest available quality (1080p in our mock)
+    expect(data.quality).toBe('1080p');
   });
 
   it('should prioritize 720p when 1080p is not available', async () => {
@@ -157,20 +165,26 @@ describe('Video Info API Route', () => {
       },
       formats: [
         {
-          itag: 22,
+          itag: 136,
           qualityLabel: '720p',
           hasVideo: true,
-          hasAudio: true,
+          hasAudio: false,
           height: 720,
           width: 1280,
         },
         {
-          itag: 18,
-          qualityLabel: '360p',
+          itag: 135,
+          qualityLabel: '480p',
           hasVideo: true,
+          hasAudio: false,
+          height: 480,
+          width: 854,
+        },
+        {
+          itag: 140,
+          hasVideo: false,
           hasAudio: true,
-          height: 360,
-          width: 640,
+          audioBitrate: 128,
         },
       ],
     } as any);
@@ -202,20 +216,26 @@ describe('Video Info API Route', () => {
       },
       formats: [
         {
-          itag: 18,
+          itag: 135,
+          qualityLabel: '480p',
+          hasVideo: true,
+          hasAudio: false,
+          height: 480,
+          width: 854,
+        },
+        {
+          itag: 134,
           qualityLabel: '360p',
           hasVideo: true,
-          hasAudio: true,
+          hasAudio: false,
           height: 360,
           width: 640,
         },
         {
-          itag: 17,
-          qualityLabel: '144p',
-          hasVideo: true,
+          itag: 140,
+          hasVideo: false,
           hasAudio: true,
-          height: 144,
-          width: 256,
+          audioBitrate: 128,
         },
       ],
     } as any);
@@ -228,7 +248,7 @@ describe('Video Info API Route', () => {
     const response = await POST(request);
     const data = await response.json();
 
-    expect(data.quality).toBe('360p'); // Highest available
+    expect(data.quality).toBe('480p'); // Highest available
   });
 
   it('should handle errors gracefully', async () => {
@@ -278,12 +298,18 @@ describe('Video Info API Route', () => {
       },
       formats: [
         {
-          itag: 18,
-          qualityLabel: undefined, // No quality label
+          itag: 134,
+          qualityLabel: undefined,
           hasVideo: true,
-          hasAudio: true,
+          hasAudio: false,
           height: 360,
           width: 640,
+        },
+        {
+          itag: 140,
+          hasVideo: false,
+          hasAudio: true,
+          audioBitrate: 128,
         },
       ],
     } as any);
