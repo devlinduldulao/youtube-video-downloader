@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import youtubedl from 'youtube-dl-exec';
+import ytdl from '@distube/ytdl-core';
+import { getYtdlOptions } from '@/lib/ytdl-config';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,40 +13,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Basic YouTube URL validation
-    if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+    if (!ytdl.validateURL(url)) {
       return NextResponse.json(
         { error: 'INVALID_SOURCE_URL' },
         { status: 400 }
       );
     }
 
-    // Use yt-dlp to get video info (works better on Vercel)
-    const info: any = await youtubedl(url, {
-      dumpSingleJson: true,
-      noCheckCertificates: true,
-      noWarnings: true,
-      preferFreeFormats: false,
-      addHeader: [
-        'referer:youtube.com',
-        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-      ]
-    });
+    const info = await ytdl.getInfo(url, getYtdlOptions());
+    const videoDetails = info.videoDetails;
+    
+    // Get best video-only format (same logic as download route)
+    const videoFormats = info.formats.filter(
+      format => format.hasVideo && !format.hasAudio
+    );
+    const selectedFormat = videoFormats.sort((a, b) => {
+      const heightA = a.height || 0;
+      const heightB = b.height || 0;
+      return heightB - heightA;
+    })[0];
 
-    // Extract best quality from formats
-    const formats = info.formats || [];
-    const videoFormats = formats.filter((f: any) => f.vcodec !== 'none' && f.acodec === 'none');
-    const bestVideo = videoFormats.sort((a: any, b: any) => (b.height || 0) - (a.height || 0))[0];
-    const quality = bestVideo?.format_note || bestVideo?.height ? `${bestVideo.height}p` : 'HD';
+    const thumbnails = videoDetails.thumbnails;
+    // Get best thumbnail
+    const thumbnail = thumbnails[thumbnails.length - 1].url;
 
     return NextResponse.json({
-      videoId: info.id,
-      title: info.title,
-      author: info.uploader || info.channel,
-      thumbnail: info.thumbnail,
-      quality: quality,
-      lengthSeconds: String(Math.floor(info.duration || 0)),
-      viewCount: String(info.view_count || 0),
+      videoId: videoDetails.videoId,
+      title: videoDetails.title,
+      author: videoDetails.author.name,
+      thumbnail: thumbnail,
+      quality: selectedFormat?.qualityLabel || 'HD',
+      lengthSeconds: videoDetails.lengthSeconds,
+      viewCount: videoDetails.viewCount,
     });
 
   } catch (error) {
@@ -53,15 +52,9 @@ export async function POST(request: NextRequest) {
     console.error('Error details:', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
-      name: error instanceof Error ? error.name : undefined,
     });
-    
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { 
-        error: 'TARGET_UNREACHABLE',
-        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
-      },
+      { error: 'TARGET_UNREACHABLE' },
       { status: 500 }
     );
   }

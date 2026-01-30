@@ -371,8 +371,8 @@ describe('DownloadPage Component', () => {
         render(<DownloadPage />);
 
         expect(screen.getByText('YT_EXTRACT_SYSTEM © 2026')).toBeInTheDocument();
-        expect(screen.getByText(/ENV:/)).toBeInTheDocument();
-        expect(screen.getByText(/PROTOCOL:/)).toBeInTheDocument();
+        expect(screen.getByText(/PORT: 3000/)).toBeInTheDocument();
+        expect(screen.getByText(/PROTOCOL: HTTP/)).toBeInTheDocument();
     });
 
     it('should update backend status in footer', async () => {

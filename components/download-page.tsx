@@ -399,8 +399,8 @@ export function DownloadPage() {
                 <div className="flex justify-between items-center text-[10px] text-muted-foreground tracking-wider">
                     <div className="flex gap-6">
                         <span>BACKEND: {loading || downloading ? 'ACTIVE' : 'IDLE'}</span>
-                        <span>ENV: {process.env.NODE_ENV === 'production' ? 'SERVERLESS' : 'DEV'}</span>
-                        <span>PROTOCOL: {process.env.NODE_ENV === 'production' ? 'HTTPS' : 'HTTP'}</span>
+                        <span>PORT: 3000</span>
+                        <span>PROTOCOL: HTTP</span>
                     </div>
                     <div>
                         YT_EXTRACT_SYSTEM © 2026

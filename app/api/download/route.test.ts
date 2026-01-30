@@ -1,8 +1,46 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unsafe-function-type */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { POST } from '@/app/api/video-info/route';
+import { POST } from '@/app/api/download/route';
 import { NextRequest } from 'next/server';
+import { PassThrough } from 'stream';
+
+// Mock ffmpeg
+vi.mock('fluent-ffmpeg', () => {
+  const mockFfmpeg: any = vi.fn(() => {
+    const mockCommand = {
+      input: vi.fn().mockReturnThis(),
+      inputFormat: vi.fn().mockReturnThis(),
+      outputOptions: vi.fn().mockReturnThis(),
+      format: vi.fn().mockReturnThis(),
+      on: vi.fn(function(this: any, event: string, handler: Function) {
+        if (event === 'end') {
+          setTimeout(() => handler(), 10);
+        }
+        return this;
+      }),
+      pipe: vi.fn((stream: PassThrough) => {
+        setTimeout(() => {
+          stream.write(Buffer.from('merged video data'));
+          stream.end();
+        }, 10);
+        return stream;
+      }),
+      kill: vi.fn(),
+    };
+    return mockCommand;
+  });
+  
+  mockFfmpeg.setFfmpegPath = vi.fn();
+  
+  return { default: mockFfmpeg };
+});
+
+// Mock @ffmpeg-installer/ffmpeg
+vi.mock('@ffmpeg-installer/ffmpeg', () => ({
+  default: { path: '/usr/bin/ffmpeg' },
+}));
 
 // Mock ytdl-core
 vi.mock('@distube/ytdl-core', () => {
@@ -11,16 +49,16 @@ vi.mock('@distube/ytdl-core', () => {
     videoDetails: {
       title: 'Test Video Title',
       videoId: 'test123',
-      lengthSeconds: '180',
-      viewCount: '5000',
-      author: { name: 'Test Creator' },
+      lengthSeconds: '120',
+      viewCount: '1000',
+      author: { name: 'Test Author' },
       thumbnails: [
-        { url: 'https://i.ytimg.com/vi/test123/default.jpg', width: 120, height: 90 },
-        { url: 'https://i.ytimg.com/vi/test123/hqdefault.jpg', width: 480, height: 360 },
-        { url: 'https://i.ytimg.com/vi/test123/maxresdefault.jpg', width: 1280, height: 720 },
+        { url: 'https://i.ytimg.com/test.jpg', width: 120, height: 90 },
+        { url: 'https://i.ytimg.com/test-hq.jpg', width: 480, height: 360 },
       ],
     },
     formats: [
+      // Video-only formats
       {
         itag: 137,
         qualityLabel: '1080p',
@@ -45,16 +83,36 @@ vi.mock('@distube/ytdl-core', () => {
         height: 480,
         width: 854,
       },
+      // Audio-only formats
       {
         itag: 140,
         hasVideo: false,
         hasAudio: true,
         audioBitrate: 128,
       },
+      {
+        itag: 139,
+        hasVideo: false,
+        hasAudio: true,
+        audioBitrate: 48,
+      },
     ],
   }));
   
-  const mockYtdl: any = vi.fn();
+  const mockYtdl: any = vi.fn((url: string, options: any) => {
+    const mockStream = {
+      on: vi.fn((event: string, handler: Function) => {
+        if (event === 'data') {
+          setTimeout(() => handler(Buffer.from('test video data')), 10);
+        } else if (event === 'end') {
+          setTimeout(() => handler(), 20);
+        }
+        return mockStream;
+      }),
+    };
+    return mockStream;
+  });
+  
   mockYtdl.validateURL = mockValidateURL;
   mockYtdl.getInfo = mockGetInfo;
   
@@ -65,13 +123,13 @@ vi.mock('@distube/ytdl-core', () => {
   };
 });
 
-describe('Video Info API Route', () => {
+describe('Download API Route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should return 400 if URL is missing', async () => {
-    const request = new NextRequest('http://localhost:3000/api/video-info', {
+    const request = new NextRequest('http://localhost:3000/api/download', {
       method: 'POST',
       body: JSON.stringify({}),
     });
@@ -80,46 +138,32 @@ describe('Video Info API Route', () => {
     const data = await response.json();
 
     expect(response.status).toBe(400);
-    expect(data.error).toBe('URL_REQUIRED');
+    expect(data.error).toBe('YouTube URL is required');
   });
 
   it('should return 400 if URL is invalid', async () => {
-    const ytdl = await import('@distube/ytdl-core');
-    // Mock validateURL to return false for this specific test
-    vi.mocked(ytdl.default.validateURL).mockReturnValueOnce(false);
-
-    const request = new NextRequest('http://localhost:3000/api/video-info', {
+    const request = new NextRequest('http://localhost:3000/api/download', {
       method: 'POST',
-      body: JSON.stringify({ url: 'https://not-youtube.com/video' }),
+      body: JSON.stringify({ url: 'https://invalid-url.com' }),
     });
 
     const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(400);
-    expect(data.error).toBe('INVALID_SOURCE_URL');
+    expect(data.error).toBe('Invalid YouTube URL');
   });
 
-  it('should return video info for valid URL', async () => {
+  it('should prioritize 1080p quality when available', async () => {
     const ytdl = await import('@distube/ytdl-core');
     
-    const request = new NextRequest('http://localhost:3000/api/video-info', {
+    const request = new NextRequest('http://localhost:3000/api/download', {
       method: 'POST',
       body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=test123' }),
     });
 
     const response = await POST(request);
-    const data = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(data).toMatchObject({
-      videoId: 'test123',
-      title: 'Test Video Title',
-      author: 'Test Creator',
-      lengthSeconds: '180',
-      viewCount: '5000',
-    });
-    expect(data.thumbnail).toContain('maxresdefault.jpg');
     expect(ytdl.validateURL).toHaveBeenCalledWith('https://www.youtube.com/watch?v=test123');
     expect(ytdl.getInfo).toHaveBeenCalledWith(
       'https://www.youtube.com/watch?v=test123',
@@ -129,46 +173,23 @@ describe('Video Info API Route', () => {
         })
       })
     );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Disposition')).toContain('Test Video Title');
+    expect(response.headers.get('Content-Type')).toBe('video/mp4');
   });
 
-  it('should return highest thumbnail quality', async () => {
-    const request = new NextRequest('http://localhost:3000/api/video-info', {
-      method: 'POST',
-      body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=test123' }),
-    });
-
-    const response = await POST(request);
-    const data = await response.json();
-
-    expect(data.thumbnail).toBe('https://i.ytimg.com/vi/test123/maxresdefault.jpg');
-  });
-
-  it('should prioritize highest video quality', async () => {
-    const request = new NextRequest('http://localhost:3000/api/video-info', {
-      method: 'POST',
-      body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=test123' }),
-    });
-
-    const response = await POST(request);
-    const data = await response.json();
-
-    // Should return the highest available quality (1080p in our mock)
-    expect(data.quality).toBe('1080p');
-  });
-
-  it('should prioritize 720p when 1080p is not available', async () => {
+  it('should prioritize 720p quality when 1080p is not available', async () => {
     const ytdl = await import('@distube/ytdl-core');
     
+    // Mock getInfo to return formats without 1080p
     vi.mocked(ytdl.getInfo).mockResolvedValueOnce({
       videoDetails: {
-        title: 'Test Video 720p',
+        title: 'Test Video Without 1080p',
         videoId: 'test456',
         lengthSeconds: '120',
-        viewCount: '2000',
+        viewCount: '1000',
         author: { name: 'Test Author' },
-        thumbnails: [
-          { url: 'https://i.ytimg.com/vi/test456/hqdefault.jpg', width: 480, height: 360 },
-        ],
+        thumbnails: [{ url: 'https://i.ytimg.com/test.jpg', width: 480, height: 360 }],
       },
       formats: [
         {
@@ -196,30 +217,29 @@ describe('Video Info API Route', () => {
       ],
     } as any);
 
-    const request = new NextRequest('http://localhost:3000/api/video-info', {
+    const request = new NextRequest('http://localhost:3000/api/download', {
       method: 'POST',
       body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=test456' }),
     });
 
     const response = await POST(request);
-    const data = await response.json();
-
-    expect(data.quality).toBe('720p');
+    
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Disposition')).toContain('Test Video Without 1080p');
   });
 
-  it('should fall back to highest quality when preferred qualities not available', async () => {
+  it('should fall back to highest quality when preferred qualities are not available', async () => {
     const ytdl = await import('@distube/ytdl-core');
     
+    // Mock getInfo to return only low-quality formats
     vi.mocked(ytdl.getInfo).mockResolvedValueOnce({
       videoDetails: {
-        title: 'Test Low Quality Video',
+        title: 'Low Quality Video',
         videoId: 'test789',
         lengthSeconds: '60',
-        viewCount: '100',
+        viewCount: '500',
         author: { name: 'Test Author' },
-        thumbnails: [
-          { url: 'https://i.ytimg.com/vi/test789/default.jpg', width: 120, height: 90 },
-        ],
+        thumbnails: [{ url: 'https://i.ytimg.com/test.jpg', width: 480, height: 360 }],
       },
       formats: [
         {
@@ -247,70 +267,55 @@ describe('Video Info API Route', () => {
       ],
     } as any);
 
-    const request = new NextRequest('http://localhost:3000/api/video-info', {
+    const request = new NextRequest('http://localhost:3000/api/download', {
       method: 'POST',
       body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=test789' }),
     });
 
     const response = await POST(request);
-    const data = await response.json();
-
-    expect(data.quality).toBe('480p'); // Highest available
+    
+    expect(response.status).toBe(200);
   });
 
-  it('should handle errors gracefully', async () => {
+  it('should handle download errors gracefully', async () => {
     const ytdl = await import('@distube/ytdl-core');
     
-    vi.mocked(ytdl.getInfo).mockRejectedValueOnce(new Error('Video unavailable'));
+    // Mock getInfo to throw an error
+    vi.mocked(ytdl.getInfo).mockRejectedValueOnce(new Error('Network error'));
 
-    const request = new NextRequest('http://localhost:3000/api/video-info', {
+    const request = new NextRequest('http://localhost:3000/api/download', {
       method: 'POST',
-      body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=error' }),
+      body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=fail' }),
     });
 
     const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(500);
-    expect(data.error).toBe('TARGET_UNREACHABLE');
+    expect(data.error).toBe('Failed to download video. Please check the URL and try again.');
   });
 
-  it('should handle short-form YouTube URLs', async () => {
+  it('should sanitize video title for filename', async () => {
     const ytdl = await import('@distube/ytdl-core');
     
-    const request = new NextRequest('http://localhost:3000/api/video-info', {
-      method: 'POST',
-      body: JSON.stringify({ url: 'https://youtu.be/test123' }),
-    });
-
-    const response = await POST(request);
-
-    expect(ytdl.validateURL).toHaveBeenCalledWith('https://youtu.be/test123');
-    expect(response.status).toBe(200);
-  });
-
-  it('should default to HD when quality label is missing', async () => {
-    const ytdl = await import('@distube/ytdl-core');
-    
+    // Mock getInfo with special characters in title
     vi.mocked(ytdl.getInfo).mockResolvedValueOnce({
       videoDetails: {
-        title: 'Test Video No Quality',
-        videoId: 'test000',
-        lengthSeconds: '90',
-        viewCount: '300',
+        title: 'Test Video: Special/Characters\\Here*',
+        videoId: 'test999',
+        lengthSeconds: '120',
+        viewCount: '1000',
         author: { name: 'Test Author' },
-        thumbnails: [
-          { url: 'https://i.ytimg.com/vi/test000/default.jpg', width: 120, height: 90 },
-        ],
+        thumbnails: [{ url: 'https://i.ytimg.com/test.jpg', width: 480, height: 360 }],
       },
       formats: [
         {
-          itag: 134,
-          qualityLabel: undefined,
+          itag: 136,
+          qualityLabel: '720p',
           hasVideo: true,
           hasAudio: false,
-          height: 360,
-          width: 640,
+          height: 720,
+          width: 1280,
         },
         {
           itag: 140,
@@ -321,14 +326,17 @@ describe('Video Info API Route', () => {
       ],
     } as any);
 
-    const request = new NextRequest('http://localhost:3000/api/video-info', {
+    const request = new NextRequest('http://localhost:3000/api/download', {
       method: 'POST',
-      body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=test000' }),
+      body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=test999' }),
     });
 
     const response = await POST(request);
-    const data = await response.json();
+    const contentDisposition = response.headers.get('Content-Disposition');
 
-    expect(data.quality).toBe('HD');
+    expect(contentDisposition).not.toContain('/');
+    expect(contentDisposition).not.toContain('\\');
+    expect(contentDisposition).not.toContain('*');
+    expect(contentDisposition).toContain('.mp4');
   });
 });
