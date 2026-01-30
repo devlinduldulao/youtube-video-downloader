@@ -52,9 +52,16 @@ export async function POST(request: NextRequest) {
     console.error('Error details:', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
     });
+    
+    // Return more specific error message for debugging
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'TARGET_UNREACHABLE' },
+      { 
+        error: 'TARGET_UNREACHABLE',
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+      },
       { status: 500 }
     );
   }
