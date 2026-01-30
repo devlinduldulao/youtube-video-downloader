@@ -400,10 +400,10 @@ describe('DownloadPage Component', () => {
         await user.type(input, 'https://www.youtube.com/watch?v=test');
         await user.click(screen.getByText('INITIALIZE'));
 
-        expect(screen.getByText(/BACKEND: ACTIVE/)).toBeInTheDocument();
+        expect(screen.getByText(/STATUS: ACTIVE/)).toBeInTheDocument();
 
         await waitFor(() => {
-            expect(screen.getByText(/BACKEND: IDLE/)).toBeInTheDocument();
+            expect(screen.getByText(/STATUS: READY/)).toBeInTheDocument();
         }, { timeout: 200 });
     });
 });
