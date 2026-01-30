@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ytdl from '@distube/ytdl-core';
+import { getYtdlOptions } from '@/lib/ytdl-config';
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const info = await ytdl.getInfo(url);
+    const info = await ytdl.getInfo(url, getYtdlOptions());
     const videoDetails = info.videoDetails;
     
     // Get best video-only format (same logic as download route)
@@ -48,6 +49,10 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Info fetch error:', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
       { error: 'TARGET_UNREACHABLE' },
       { status: 500 }

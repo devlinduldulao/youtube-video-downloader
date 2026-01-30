@@ -3,6 +3,7 @@ import ytdl from '@distube/ytdl-core';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { PassThrough } from 'stream';
+import { getYtdlOptions } from '@/lib/ytdl-config';
 
 // Set ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -26,8 +27,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get video info
-    const info = await ytdl.getInfo(url);
+    // Get video info with enhanced options for production
+    const info = await ytdl.getInfo(url, getYtdlOptions());
     const title = info.videoDetails.title.replace(/[^\w\s-]/g, '');
     
     // Get best video-only format
@@ -57,9 +58,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create video and audio streams
-    const videoStream = ytdl(url, { format: videoFormat });
-    const audioStream = ytdl(url, { format: audioFormat });
+    // Create video and audio streams with enhanced options
+    const videoStream = ytdl(url, getYtdlOptions({ format: videoFormat }));
+    const audioStream = ytdl(url, getYtdlOptions({ format: audioFormat }));
 
     // Create output stream for merged video
     const outputStream = new PassThrough();

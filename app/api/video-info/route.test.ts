@@ -121,7 +121,14 @@ describe('Video Info API Route', () => {
     });
     expect(data.thumbnail).toContain('maxresdefault.jpg');
     expect(ytdl.validateURL).toHaveBeenCalledWith('https://www.youtube.com/watch?v=test123');
-    expect(ytdl.getInfo).toHaveBeenCalledWith('https://www.youtube.com/watch?v=test123');
+    expect(ytdl.getInfo).toHaveBeenCalledWith(
+      'https://www.youtube.com/watch?v=test123',
+      expect.objectContaining({
+        requestOptions: expect.objectContaining({
+          headers: expect.any(Object)
+        })
+      })
+    );
   });
 
   it('should return highest thumbnail quality', async () => {

@@ -165,7 +165,14 @@ describe('Download API Route', () => {
     const response = await POST(request);
 
     expect(ytdl.validateURL).toHaveBeenCalledWith('https://www.youtube.com/watch?v=test123');
-    expect(ytdl.getInfo).toHaveBeenCalledWith('https://www.youtube.com/watch?v=test123');
+    expect(ytdl.getInfo).toHaveBeenCalledWith(
+      'https://www.youtube.com/watch?v=test123',
+      expect.objectContaining({
+        requestOptions: expect.objectContaining({
+          headers: expect.any(Object)
+        })
+      })
+    );
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Disposition')).toContain('Test Video Title');
     expect(response.headers.get('Content-Type')).toBe('video/mp4');
