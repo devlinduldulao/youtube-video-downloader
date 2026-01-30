@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from "react";
-import Image from "next/image";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { AlertCircle, ArrowRight, Box, Download, CheckCircle2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { cn } from "@/lib/utils";
+import { useState } from 'react';
+import Image from 'next/image';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { AlertCircle, ArrowRight, Box, Download, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 interface VideoInfo {
     videoId: string;
@@ -25,7 +27,7 @@ interface DownloadStatus {
 }
 
 export function DownloadPage() {
-    const [url, setUrl] = useState("");
+    const [url, setUrl] = useState('');
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
@@ -67,6 +69,7 @@ export function DownloadPage() {
         setDownloading(true);
         setError(null);
         setDownloadStatus(null);
+        const toastId = toast.loading('Initiating download protocol...');
 
         try {
             const response = await fetch('/api/download', {
@@ -102,15 +105,22 @@ export function DownloadPage() {
             window.URL.revokeObjectURL(downloadUrl);
             document.body.removeChild(a);
 
-            // Simulating a success response object since we handled the blob directly
-            setDownloadStatus({
+            const successStatus = {
                 filename: filename,
                 path: 'System Downloads Folder',
                 quality: videoInfo?.quality || 'High'
+            };
+
+            setDownloadStatus(successStatus);
+            toast.success('Download successfully executed!', {
+                id: toastId,
+                description: `File ${filename} saved to downloads.`
             });
 
         } catch (err) {
-            setError(err instanceof Error ? `DOWNLOAD_ERROR: ${err.message}` : 'EXTRACTION_FAILED');
+            const errorMsg = err instanceof Error ? `DOWNLOAD_ERROR: ${err.message}` : 'EXTRACTION_FAILED';
+            setError(errorMsg);
+            toast.error(errorMsg, { id: toastId });
         } finally {
             setDownloading(false);
         }
@@ -131,7 +141,7 @@ export function DownloadPage() {
     const formatViews = (views: string) => {
         try {
             const num = parseInt(views);
-            if (isNaN(num)) return "0";
+            if (isNaN(num)) return '0';
             if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
             if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
             return views;
@@ -141,19 +151,24 @@ export function DownloadPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-[#F0F0F0] font-mono selection:bg-[#D4FF00] selection:text-black overflow-hidden relative">
+        <div className="min-h-screen bg-background text-foreground font-mono selection:bg-[var(--color-brand-lime)] selection:text-black overflow-hidden relative transition-colors duration-300">
             {/* Background Grid */}
             <div
-                className="fixed inset-0 pointer-events-none opacity-20"
+                className="fixed inset-0 pointer-events-none opacity-[0.03] dark:opacity-20 transition-opacity duration-300"
                 style={{
-                    backgroundImage: 'linear-gradient(#1a1a1a 1px, transparent 1px), linear-gradient(90deg, #1a1a1a 1px, transparent 1px)',
-                    backgroundSize: '40px 40px'
+                    backgroundImage: 'linear-gradient(currentColor 1px, transparent 1px), linear-gradient(90deg, currentColor 1px, transparent 1px)',
+                    backgroundSize: '40px 40px',
+                    color: 'var(--foreground)'
                 }}
             />
 
             {/* Decorative Elements */}
-            <div className="fixed top-0 left-0 w-64 h-64 bg-[#D4FF00] rounded-full blur-[150px] opacity-10 pointer-events-none" />
-            <div className="fixed bottom-0 right-0 w-96 h-96 bg-[#D4FF00] rounded-full blur-[200px] opacity-5 pointer-events-none" />
+            <div className="fixed top-0 left-0 w-64 h-64 bg-[var(--color-brand-lime)] rounded-full blur-[150px] opacity-10 pointer-events-none" />
+            <div className="fixed bottom-0 right-0 w-96 h-96 bg-[var(--color-brand-lime)] rounded-full blur-[200px] opacity-5 pointer-events-none" />
+
+            <div className="absolute top-6 right-6 z-50">
+                <ThemeToggle />
+            </div>
 
             <main className="relative z-10 container mx-auto px-4 py-20 max-w-5xl">
 
@@ -165,16 +180,16 @@ export function DownloadPage() {
                         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                     >
                         <div className="flex items-center gap-2 mb-6">
-                            <span className="w-2 h-2 bg-[#D4FF00] animate-pulse" />
-                            <span className="text-xs tracking-[0.2em] text-neutral-500">SYSTEM_READY</span>
+                            <span className="w-2 h-2 bg-[var(--color-brand-lime)] animate-pulse" />
+                            <span className="text-xs tracking-[0.2em] text-muted-foreground">SYSTEM_READY</span>
                         </div>
 
-                        <h1 className="text-6xl md:text-8xl font-black tracking-tighter mb-6 relative inline-block font-['Unbounded']">
+                        <h1 className="text-6xl md:text-8xl font-black tracking-tighter mb-6 relative inline-block font-display">
                             YT_EXTRACT
-                            <span className="text-[#D4FF00] text-lg absolute -top-4 -right-8 font-mono">v.2.0</span>
+                            <span className="text-[var(--color-brand-lime)] text-lg absolute -top-4 -right-8 font-mono">v.2.0</span>
                         </h1>
 
-                        <p className="max-w-xl text-neutral-400 text-lg leading-relaxed border-l-2 border-[#D4FF00]/30 pl-6">
+                        <p className="max-w-xl text-muted-foreground text-lg leading-relaxed border-l-2 border-[var(--color-brand-lime)]/30 pl-6">
                             Advanced protocol for media extraction. Direct download to local storage.
                             High-fidelity MP4 assets acquired automatically.
                         </p>
@@ -183,12 +198,12 @@ export function DownloadPage() {
 
                 {/* Input Interface */}
                 <section className="relative mb-20">
-                    <div className="absolute -inset-1 bg-linear-to-r from-[#D4FF00] to-transparent opacity-20 blur-lg rounded-none" />
-                    <div className="relative bg-[#0A0A0A] border border-neutral-800 p-1 flex items-center">
+                    <div className="absolute -inset-1 bg-linear-to-r from-[var(--color-brand-lime)] to-transparent opacity-20 blur-lg rounded-none" />
+                    <div className="relative bg-card border border-border p-1 flex items-center transition-colors duration-300">
 
                         <div className="flex-1 relative group">
                             <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
-                                <Box className="w-5 h-5 text-neutral-600 group-focus-within:text-[#D4FF00] transition-colors" />
+                                <Box className="w-5 h-5 text-muted-foreground group-focus-within:text-[var(--color-brand-lime)] transition-colors" />
                             </div>
                             <Input
                                 type="text"
@@ -196,7 +211,7 @@ export function DownloadPage() {
                                 value={url}
                                 onChange={(e) => setUrl(e.target.value)}
                                 onKeyDown={(e) => e.key === "Enter" && handleFetchInfo()}
-                                className="w-full h-20 bg-transparent border-none text-2xl pl-16 text-white placeholder:text-neutral-700 focus-visible:ring-0 rounded-none font-['Unbounded'] font-light"
+                                className="w-full h-20 bg-transparent border-none text-2xl pl-16 text-foreground placeholder:text-muted-foreground focus-visible:ring-0 rounded-none font-display font-light"
                             />
                         </div>
 
@@ -205,7 +220,7 @@ export function DownloadPage() {
                             disabled={loading || !url}
                             className={cn(
                                 "h-20 px-10 text-lg font-bold uppercase tracking-wider transition-all duration-300 rounded-none",
-                                "bg-[#D4FF00] text-black hover:bg-[#b8dd00] hover:scale-[0.98]",
+                                "bg-[var(--color-brand-lime)] text-black hover:opacity-90 hover:scale-[0.98]",
                                 "disabled:opacity-50 disabled:cursor-not-allowed"
                             )}
                         >
@@ -230,7 +245,7 @@ export function DownloadPage() {
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: "auto" }}
                                 exit={{ opacity: 0, height: 0 }}
-                                className="mt-2 bg-red-900/10 border-l-2 border-red-500 text-red-500 p-4 font-mono text-sm flex items-center gap-3"
+                                className="mt-2 bg-destructive/10 border-l-2 border-destructive text-destructive p-4 font-mono text-sm flex items-center gap-3"
                             >
                                 <AlertCircle className="w-4 h-4" />
                                 {error}
@@ -245,19 +260,19 @@ export function DownloadPage() {
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: "auto" }}
                                 exit={{ opacity: 0, height: 0 }}
-                                className="mt-2 bg-[#D4FF00]/10 border-l-2 border-[#D4FF00] text-[#D4FF00] p-4 font-mono text-sm"
+                                className="mt-2 bg-[var(--color-brand-lime)]/10 border-l-2 border-[var(--color-brand-lime)] text-[var(--color-brand-lime)] p-4 font-mono text-sm"
                             >
                                 <div className="flex items-start gap-3">
                                     <CheckCircle2 className="w-4 h-4 mt-0.5" />
                                     <div className="space-y-1">
                                         <div className="font-bold">EXTRACTION_COMPLETE</div>
-                                        <div className="text-neutral-400 text-xs">
+                                        <div className="text-foreground/70 text-xs">
                                             FILE: {downloadStatus.filename}
                                         </div>
-                                        <div className="text-neutral-400 text-xs">
+                                        <div className="text-foreground/70 text-xs">
                                             PATH: {downloadStatus.path}
                                         </div>
-                                        <div className="text-neutral-400 text-xs">
+                                        <div className="text-foreground/70 text-xs">
                                             QUALITY: {downloadStatus.quality}
                                         </div>
                                     </div>
@@ -279,11 +294,11 @@ export function DownloadPage() {
                         >
                             {/* Preview Unit */}
                             <div className="lg:col-span-7 group cursor-pointer relative">
-                                <div className="absolute -inset-2 bg-[#D4FF00] opacity-0 group-hover:opacity-10 transition-opacity duration-500" />
-                                <div className="relative border border-neutral-800 bg-[#0A0A0A] overflow-hidden aspect-video">
+                                <div className="absolute -inset-2 bg-[var(--color-brand-lime)] opacity-0 group-hover:opacity-10 transition-opacity duration-500" />
+                                <div className="relative border border-border bg-card overflow-hidden aspect-video transition-colors duration-300">
                                     {/* Decorative corner markers */}
-                                    <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-[#D4FF00] z-20" />
-                                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-[#D4FF00] z-20" />
+                                    <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-[var(--color-brand-lime)] z-20" />
+                                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-[var(--color-brand-lime)] z-20" />
 
                                     <Image
                                         src={videoInfo.thumbnail}
@@ -291,21 +306,20 @@ export function DownloadPage() {
                                         fill
                                         className="object-cover grayscale transition-all duration-700 group-hover:grayscale-0 group-hover:scale-105"
                                         onError={(e) => {
-                                            // Fallback handling if needed, though next/image usually handles this
                                             const target = e.target as HTMLImageElement;
                                             target.src = `https://img.youtube.com/vi/${videoInfo.videoId}/hqdefault.jpg`;
                                         }}
                                     />
 
-                                    <div className="absolute inset-0 bg-linear-to-t from-black/80 via-transparent to-transparent flex items-end p-8">
+                                    <div className="absolute inset-0 bg-linear-to-t from-background/90 via-transparent to-transparent flex items-end p-8">
                                         <div>
                                             <div className="flex items-center gap-2 mb-2">
-                                                <span className="px-2 py-0.5 bg-[#D4FF00] text-black text-[10px] font-bold uppercase">Target_Acquired</span>
+                                                <span className="px-2 py-0.5 bg-[var(--color-brand-lime)] text-black text-[10px] font-bold uppercase">Target_Acquired</span>
                                             </div>
-                                            <h2 className="text-3xl font-bold font-['Unbounded'] leading-tight mb-2 line-clamp-2">
+                                            <h2 className="text-3xl font-bold font-display leading-tight mb-2 line-clamp-2 text-foreground">
                                                 {videoInfo.title}
                                             </h2>
-                                            <p className="text-neutral-400 font-mono text-sm">
+                                            <p className="text-muted-foreground font-mono text-sm">
                                                 AUTHOR: {videoInfo.author.toUpperCase()} // ID: {videoInfo.videoId}
                                             </p>
                                         </div>
@@ -316,24 +330,24 @@ export function DownloadPage() {
                             {/* Control Unit */}
                             <div className="lg:col-span-5 flex flex-col justify-end">
                                 <div className="space-y-6">
-                                    <div className="flex items-center justify-between border-b border-neutral-800 pb-2">
-                                        <span className="text-xs text-neutral-500 tracking-widest">TARGET_METADATA</span>
-                                        <span className="text-xs text-[#D4FF00] animate-pulse">■ LOCKED</span>
+                                    <div className="flex items-center justify-between border-b border-border pb-2">
+                                        <span className="text-xs text-muted-foreground tracking-widest">TARGET_METADATA</span>
+                                        <span className="text-xs text-[var(--color-brand-lime)] animate-pulse">■ LOCKED</span>
                                     </div>
 
                                     {/* Metadata Display */}
                                     <div className="space-y-3 text-sm">
-                                        <div className="flex justify-between items-center border-l-2 border-neutral-800 pl-4 py-2">
-                                            <span className="text-neutral-500">DURATION</span>
-                                            <span className="text-[#D4FF00] font-bold">{formatDuration(videoInfo.lengthSeconds)}</span>
+                                        <div className="flex justify-between items-center border-l-2 border-border pl-4 py-2 transition-colors duration-300">
+                                            <span className="text-muted-foreground">DURATION</span>
+                                            <span className="text-[var(--color-brand-lime)] font-bold">{formatDuration(videoInfo.lengthSeconds)}</span>
                                         </div>
-                                        <div className="flex justify-between items-center border-l-2 border-neutral-800 pl-4 py-2">
-                                            <span className="text-neutral-500">VIEWS</span>
-                                            <span className="text-[#D4FF00] font-bold">{formatViews(videoInfo.viewCount)}</span>
+                                        <div className="flex justify-between items-center border-l-2 border-border pl-4 py-2 transition-colors duration-300">
+                                            <span className="text-muted-foreground">VIEWS</span>
+                                            <span className="text-[var(--color-brand-lime)] font-bold">{formatViews(videoInfo.viewCount)}</span>
                                         </div>
-                                        <div className="flex justify-between items-center border-l-2 border-neutral-800 pl-4 py-2">
-                                            <span className="text-neutral-500">QUALITY</span>
-                                            <span className="text-[#D4FF00] font-bold">{videoInfo.quality}</span>
+                                        <div className="flex justify-between items-center border-l-2 border-border pl-4 py-2 transition-colors duration-300">
+                                            <span className="text-muted-foreground">QUALITY</span>
+                                            <span className="text-[var(--color-brand-lime)] font-bold">{videoInfo.quality}</span>
                                         </div>
                                     </div>
 
@@ -344,7 +358,7 @@ export function DownloadPage() {
                                             disabled={downloading}
                                             className={cn(
                                                 "w-full h-16 text-lg font-black uppercase tracking-widest transition-all duration-300 rounded-none relative overflow-hidden group",
-                                                "bg-[#D4FF00] text-black hover:bg-[#b8dd00]",
+                                                "bg-[var(--color-brand-lime)] text-black hover:opacity-90",
                                                 "disabled:opacity-50 disabled:cursor-not-allowed"
                                             )}
                                         >
@@ -365,8 +379,8 @@ export function DownloadPage() {
                                         </Button>
                                     </div>
 
-                                    <div className="pt-4 border-t border-neutral-800">
-                                        <p className="text-[10px] text-neutral-600 leading-relaxed font-mono">
+                                    <div className="pt-4 border-t border-border">
+                                        <p className="text-[10px] text-muted-foreground leading-relaxed font-mono">
                                             NOTICE: File will be saved to your system&apos;s Downloads directory.
                                             Extraction uses highest available quality.
                                             Process may take 30-120 seconds depending on file size.
@@ -381,8 +395,8 @@ export function DownloadPage() {
             </main>
 
             {/* Footer / Status Bar */}
-            <footer className="fixed bottom-0 left-0 right-0 border-t border-neutral-900 bg-[#050505]/80 backdrop-blur-sm py-2 px-6">
-                <div className="flex justify-between items-center text-[10px] text-neutral-600 tracking-wider">
+            <footer className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-sm py-2 px-6 transition-colors duration-300">
+                <div className="flex justify-between items-center text-[10px] text-muted-foreground tracking-wider">
                     <div className="flex gap-6">
                         <span>BACKEND: {loading || downloading ? 'ACTIVE' : 'IDLE'}</span>
                         <span>PORT: 3000</span>

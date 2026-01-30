@@ -22,11 +22,23 @@ export async function POST(request: NextRequest) {
     const info = await ytdl.getInfo(url);
     const videoDetails = info.videoDetails;
     
-    // Get highest quality format for display
-    const format = ytdl.chooseFormat(info.formats, { 
-      quality: 'highestvideo',
-      filter: 'videoandaudio' 
-    });
+    // Get formats with both video and audio (same logic as download route)
+    const formats = info.formats.filter(format => format.hasVideo && format.hasAudio);
+    
+    // Prioritize 1080p, then 720p, then highest available
+    const preferredQualities = ['1080p', '720p'];
+    let selectedFormat = formats.find(format => 
+      preferredQualities.some(quality => format.qualityLabel?.includes(quality))
+    );
+    
+    // If no preferred quality found, select highest quality format
+    if (!selectedFormat) {
+      selectedFormat = formats.sort((a, b) => {
+        const heightA = a.height || 0;
+        const heightB = b.height || 0;
+        return heightB - heightA;
+      })[0];
+    }
 
     const thumbnails = videoDetails.thumbnails;
     // Get best thumbnail
@@ -37,7 +49,7 @@ export async function POST(request: NextRequest) {
       title: videoDetails.title,
       author: videoDetails.author.name,
       thumbnail: thumbnail,
-      quality: format.qualityLabel || 'HD',
+      quality: selectedFormat?.qualityLabel || 'HD',
       lengthSeconds: videoDetails.lengthSeconds,
       viewCount: videoDetails.viewCount,
     });

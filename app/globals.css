@@ -59,12 +59,12 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentColor);
+    border-color: var(--color-border, currentColor);
   }
 }
 
 :root {
-  /* Shadcn Default Palette */
+  /* Light Theme Defaults */
   --background: 0 0% 100%;
   --foreground: 0 0% 3.9%;
   --card: 0 0% 100%;
@@ -91,42 +91,74 @@
   --chart-5: 27 87% 67%;
   --radius: 0.5rem;
 
-  /* Custom Design System vars */
-  --color-brand-lime: #d4ff00;
+  /* Custom Design System vars - Light Mode overrides for visibility */
+  --color-brand-lime: #4d7c0f; /* Darker Lime / Olive for text visibility on white */
   --color-brand-dark: #050505;
   --color-brand-surface: #121212;
   --font-display: "Unbounded", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 }
 
-/* Dark theme overrides (and also standard shadcn dark tokens) */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-  }
+[data-theme="dark"] {
+  /* Cyberpunk Dark Theme */
+  --background: 0 0% 2%;    /* #050505 */
+  --foreground: 0 0% 98%;
+  --card: 0 0% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --popover: 0 0% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 0 0% 9%;
+  --secondary: 0 0% 14.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 14.9%;
+  --muted-foreground: 0 0% 63.9%;
+  --accent: 0 0% 14.9%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 14.9%;
+  --input: 0 0% 14.9%;
+  --ring: 0 0% 83.1%;
+  --chart-1: 220 70% 50%;
+  --chart-2: 160 60% 45%;
+  --chart-3: 30 80% 55%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 75% 55%;
+
+  /* Brand Colors Restore */
+  --color-brand-lime: #d4ff00;
+}
+
+[data-theme="dim"] {
+  /* Dim / Slate / Zinc Theme */
+  --background: 222 17% 10%;  /* ~#15181e */
+  --foreground: 210 20% 98%;
+  --card: 222 17% 12%;
+  --card-foreground: 210 20% 98%;
+  --popover: 222 17% 10%;
+  --popover-foreground: 210 20% 98%;
+  --primary: 210 20% 98%;
+  --primary-foreground: 222 47% 11%;
+  --secondary: 217 19% 27%;
+  --secondary-foreground: 210 20% 98%;
+  --muted: 217 19% 27%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 217 19% 27%;
+  --accent-foreground: 210 20% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 20% 98%;
+  --border: 217 19% 27%;
+  --input: 217 19% 27%;
+  --ring: 212 100% 48%; /* Blue-ish ring for dim */
+  --chart-1: 220 70% 50%;
+  --chart-2: 160 60% 45%;
+  --chart-3: 30 80% 55%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 75% 55%;
+
+  /* Brand Colors Restore */
+  --color-brand-lime: #d4ff00;
 }
 
 @layer base {
@@ -134,21 +166,14 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-mono;
+    overflow-x: hidden;
   }
 }
 
 /* 
-   FORCED OVERRIDES FOR THE DESIGN SYSTEM
-   These specific exact hex codes were requested.
+   Overrides
 */
-body {
-  background-color: var(--color-brand-dark);
-  color: white;
-  font-family: var(--font-mono);
-  overflow-x: hidden;
-}
-
 ::selection {
   background-color: var(--color-brand-lime);
   color: black;

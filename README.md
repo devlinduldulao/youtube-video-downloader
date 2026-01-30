@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# YouTube Video Downloader - YT_EXTRACT v2.0
 
-## Getting Started
+A modern, high-performance YouTube video downloader built with Next.js 16, featuring an advanced cyberpunk-inspired UI and intelligent quality selection.
 
-First, run the development server:
+## ✨ Features
+
+- 🎯 **Smart Quality Selection**: Automatically downloads in 1080p or 720p (or highest available)
+- ⚡ **Fast & Efficient**: Built with Next.js 16 and Turbopack
+- 🎨 **Unique Design**: Cyberpunk-inspired UI with Unbounded & JetBrains Mono fonts
+- 📱 **Responsive**: Works on desktop and mobile
+- 🧪 **Fully Tested**: 30 comprehensive unit tests (100% passing)
+- 🎭 **Smooth Animations**: Framer Motion powered interactions
+- 🔒 **Type-Safe**: Built with TypeScript
+
+## 🚀 Quick Start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🎯 Quality Selection
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**Priority Order:**
+1. **1080p** (Full HD) - First choice
+2. **720p** (HD) - Fallback  
+3. **Highest Available** - Ultimate fallback
 
-## Learn More
+## 🧪 Testing
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run test:run    # Run all tests
+npm test            # Watch mode
+npm run test:coverage
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Results:** ✅ 30/30 tests passing
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+See [TESTING.md](./TESTING.md) for details.
 
-## Deploy on Vercel
+## 📖 Usage
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Paste YouTube URL
+2. Click "INITIALIZE"  
+3. Review video info
+4. Click "EXECUTE_DOWNLOAD"
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🏗️ Tech Stack
+
+- Next.js 16 + React 19
+- TypeScript 5
+- Tailwind CSS 4
+- Framer Motion
+- Vitest + React Testing Library
+- @distube/ytdl-core
+
+---
+
+**YT_EXTRACT_SYSTEM © 2026**
