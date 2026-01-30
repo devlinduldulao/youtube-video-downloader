@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -371,7 +369,8 @@ describe('DownloadPage Component', () => {
         render(<DownloadPage />);
 
         expect(screen.getByText('YT_EXTRACT_SYSTEM © 2026')).toBeInTheDocument();
-        expect(screen.getByText(/STATUS:/)).toBeInTheDocument();
+        expect(screen.getByText(/PORT: 3000/)).toBeInTheDocument();
+        expect(screen.getByText(/PROTOCOL: HTTP/)).toBeInTheDocument();
     });
 
     it('should update backend status in footer', async () => {
@@ -394,16 +393,16 @@ describe('DownloadPage Component', () => {
 
         render(<DownloadPage />);
 
-        expect(screen.getByText(/STATUS: READY/)).toBeInTheDocument();
+        expect(screen.getByText(/BACKEND: IDLE/)).toBeInTheDocument();
 
         const input = screen.getByPlaceholderText('INPUT_SOURCE_URL');
         await user.type(input, 'https://www.youtube.com/watch?v=test');
         await user.click(screen.getByText('INITIALIZE'));
 
-        expect(screen.getByText(/STATUS: ACTIVE/)).toBeInTheDocument();
+        expect(screen.getByText(/BACKEND: ACTIVE/)).toBeInTheDocument();
 
         await waitFor(() => {
-            expect(screen.getByText(/STATUS: READY/)).toBeInTheDocument();
+            expect(screen.getByText(/BACKEND: IDLE/)).toBeInTheDocument();
         }, { timeout: 200 });
     });
 });
