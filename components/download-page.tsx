@@ -398,9 +398,7 @@ export function DownloadPage() {
             <footer className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-sm py-2 px-6 transition-colors duration-300">
                 <div className="flex justify-between items-center text-[10px] text-muted-foreground tracking-wider">
                     <div className="flex gap-6">
-                        <span>BACKEND: {loading || downloading ? 'ACTIVE' : 'IDLE'}</span>
-                        <span>PORT: 3000</span>
-                        <span>PROTOCOL: HTTP</span>
+                        <span>STATUS: {loading || downloading ? 'ACTIVE' : 'READY'}</span>
                     </div>
                     <div>
                         YT_EXTRACT_SYSTEM © 2026

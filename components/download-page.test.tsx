@@ -371,8 +371,7 @@ describe('DownloadPage Component', () => {
         render(<DownloadPage />);
 
         expect(screen.getByText('YT_EXTRACT_SYSTEM © 2026')).toBeInTheDocument();
-        expect(screen.getByText(/PORT: 3000/)).toBeInTheDocument();
-        expect(screen.getByText(/PROTOCOL: HTTP/)).toBeInTheDocument();
+        expect(screen.getByText(/STATUS:/)).toBeInTheDocument();
     });
 
     it('should update backend status in footer', async () => {
@@ -395,7 +394,7 @@ describe('DownloadPage Component', () => {
 
         render(<DownloadPage />);
 
-        expect(screen.getByText(/BACKEND: IDLE/)).toBeInTheDocument();
+        expect(screen.getByText(/STATUS: READY/)).toBeInTheDocument();
 
         const input = screen.getByPlaceholderText('INPUT_SOURCE_URL');
         await user.type(input, 'https://www.youtube.com/watch?v=test');
