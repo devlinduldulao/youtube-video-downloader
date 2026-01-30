@@ -1,12 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ytdl from '@distube/ytdl-core';
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import { PassThrough } from 'stream';
-import { getYtdlOptions } from '@/lib/ytdl-config';
-
-// Set ffmpeg path
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+import youtubedl from 'youtube-dl-exec';
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,103 +12,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate YouTube URL
-    if (!ytdl.validateURL(url)) {
+    // Basic YouTube URL validation
+    if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
       return NextResponse.json(
         { error: 'Invalid YouTube URL' },
         { status: 400 }
       );
     }
 
-    // Get video info with enhanced options for production
-    const info = await ytdl.getInfo(url, getYtdlOptions());
-    const title = info.videoDetails.title.replace(/[^\w\s-]/g, '');
+    // Get video info first to get title
+    const info: any = await youtubedl(url, {
+      dumpSingleJson: true,
+      noCheckCertificates: true,
+      noWarnings: true,
+    });
     
-    // Get best video-only format
-    const videoFormats = info.formats.filter(
-      format => format.hasVideo && !format.hasAudio
-    );
-    const videoFormat = videoFormats.sort((a, b) => {
-      const heightA = a.height || 0;
-      const heightB = b.height || 0;
-      return heightB - heightA;
-    })[0];
+    const title = (info.title || 'video').replace(/[^\w\s-]/g, '');
 
-    // Get best audio-only format
-    const audioFormats = info.formats.filter(
-      format => format.hasAudio && !format.hasVideo
-    );
-    const audioFormat = audioFormats.sort((a, b) => {
-      const bitrateA = a.audioBitrate || 0;
-      const bitrateB = b.audioBitrate || 0;
-      return bitrateB - bitrateA;
-    })[0];
-
-    if (!videoFormat || !audioFormat) {
-      return NextResponse.json(
-        { error: 'No suitable video/audio formats found' },
-        { status: 500 }
-      );
-    }
-
-    // Create video and audio streams with enhanced options
-    const videoStream = ytdl(url, getYtdlOptions({ format: videoFormat }));
-    const audioStream = ytdl(url, getYtdlOptions({ format: audioFormat }));
-
-    // Create output stream for merged video
-    const outputStream = new PassThrough();
-
-    // Merge video and audio using ffmpeg
-    const ffmpegProcess = ffmpeg()
-      .input(videoStream)
-      .inputFormat('mp4')
-      .input(audioStream)
-      .inputFormat('webm')
-      .outputOptions([
-        '-c:v copy',      // Copy video codec (no re-encoding)
-        '-c:a aac',       // Convert audio to AAC
-        '-movflags frag_keyframe+empty_moov' // Enable streaming
-      ])
-      .format('mp4')
-      .on('error', (error) => {
-        console.error('FFmpeg error:', error);
-        outputStream.destroy(error);
-      })
-      .on('end', () => {
-        console.log('FFmpeg processing finished');
-      });
-
-    // Pipe ffmpeg output to our output stream
-    ffmpegProcess.pipe(outputStream, { end: true });
+    // Download video using youtube-dl-exec with output to stdout
+    // This returns a readable stream of the video data
+    const videoBuffer = await youtubedl(url, {
+      format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+      output: '-',  // Output to stdout
+      noCheckCertificates: true,
+      noWarnings: true,
+      addHeader: [
+        'referer:youtube.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      ],
+    });
 
     // Set headers for download
     const headers = new Headers();
     headers.set('Content-Disposition', `attachment; filename="${title}.mp4"`);
     headers.set('Content-Type', 'video/mp4');
 
-    // Convert Node.js stream to Web ReadableStream
-    const webStream = new ReadableStream({
-      start(controller) {
-        outputStream.on('data', (chunk) => {
-          controller.enqueue(chunk);
-        });
-
-        outputStream.on('end', () => {
-          controller.close();
-        });
-
-        outputStream.on('error', (error) => {
-          console.error('Stream error:', error);
-          controller.error(error);
-        });
-      },
-      cancel() {
-        outputStream.destroy();
-        ffmpegProcess.kill('SIGKILL');
-      }
-    });
-
-    return new NextResponse(webStream, { headers });
+    // Return the buffer as response
+    return new NextResponse(videoBuffer as any, { headers });
   } catch (error) {
     console.error('Download error:', error);
     return NextResponse.json(
