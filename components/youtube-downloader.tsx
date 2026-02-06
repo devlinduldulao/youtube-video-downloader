@@ -24,6 +24,10 @@ export function YouTubeDownloader() {
         setStatus('idle');
         setMessage('');
 
+        // Create AbortController with 60 minute timeout for longer videos
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60 * 60 * 1000);
+
         try {
             const response = await fetch('/api/download', {
                 method: 'POST',
@@ -31,7 +35,10 @@ export function YouTubeDownloader() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({ url }),
+                signal: controller.signal,
             });
+
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 const error = await response.json();
@@ -58,8 +65,14 @@ export function YouTubeDownloader() {
             setMessage('Video downloaded successfully!');
             setUrl('');
         } catch (error) {
-            setStatus('error');
-            setMessage(error instanceof Error ? error.message : 'An error occurred');
+            clearTimeout(timeoutId);
+            if (error instanceof Error && error.name === 'AbortError') {
+                setStatus('error');
+                setMessage('Download timed out. The video may be too long. Please try a shorter video.');
+            } else {
+                setStatus('error');
+                setMessage(error instanceof Error ? error.message : 'An error occurred');
+            }
         } finally {
             setIsDownloading(false);
         }

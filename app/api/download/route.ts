@@ -1,18 +1,123 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ytdl from '@distube/ytdl-core';
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import { createWriteStream, createReadStream, unlink } from 'fs';
+import { spawn } from 'child_process';
+import { createReadStream, statSync, existsSync, readdirSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { promisify } from 'util';
 
-const unlinkAsync = promisify(unlink);
+// Helper to clean up temp directory
+function cleanupTempDir(dir: string) {
+  try {
+    if (dir && existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true });
+      console.log('[DOWNLOAD] Temp directory cleaned up:', dir);
+    }
+  } catch (error) {
+    console.error('[DOWNLOAD] Failed to clean up temp dir:', error);
+  }
+}
 
-// Set ffmpeg path
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+// Full path to yt-dlp executable
+const YT_DLP_PATH = 'C:\\Users\\DEVDUL\\AppData\\Local\\Microsoft\\WinGet\\Links\\yt-dlp.exe';
+
+// Route segment config - extend timeout for longer videos (1+ hour)
+export const maxDuration = 3600; // 60 minutes max execution time
+export const dynamic = 'force-dynamic';
+
+// YouTube URL validation regex
+const YOUTUBE_URL_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)[\w-]+/;
+
+function validateYouTubeURL(url: string): boolean {
+  return YOUTUBE_URL_REGEX.test(url);
+}
+
+// Get video title using yt-dlp
+async function getVideoTitle(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const process = spawn(YT_DLP_PATH, ['--get-title', '--no-warnings', '--no-check-certificates', url]);
+    let title = '';
+    let error = '';
+
+    process.stdout.on('data', (data) => {
+      title += data.toString();
+    });
+
+    process.stderr.on('data', (data) => {
+      error += data.toString();
+    });
+
+    process.on('close', (code) => {
+      if (code === 0) {
+        resolve(title.trim().replace(/[^\w\s-]/g, '') || 'video');
+      } else {
+        reject(new Error(error || 'Failed to get video title'));
+      }
+    });
+  });
+}
+
+// Download video using yt-dlp
+async function downloadWithYtDlp(url: string, outputDir: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    console.log('[DOWNLOAD] Starting yt-dlp download...');
+    console.log('[DOWNLOAD] Output directory:', outputDir);
+    
+    const outputTemplate = join(outputDir, 'video.%(ext)s');
+    
+    const process = spawn(YT_DLP_PATH, [
+      '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
+      '--merge-output-format', 'mp4',
+      '-o', outputTemplate,
+      '--no-warnings',
+      '--no-check-certificates',
+      '--progress',
+      url
+    ]);
+
+    process.stdout.on('data', (data) => {
+      const output = data.toString().trim();
+      if (output) {
+        console.log('[DOWNLOAD]', output);
+      }
+    });
+
+    process.stderr.on('data', (data) => {
+      const output = data.toString().trim();
+      if (output) {
+        console.log('[DOWNLOAD] yt-dlp:', output);
+      }
+    });
+
+    process.on('close', (code) => {
+      if (code === 0) {
+        console.log('[DOWNLOAD] yt-dlp process complete');
+        
+        // Find the downloaded file
+        const files = readdirSync(outputDir);
+        console.log('[DOWNLOAD] Files in output dir:', files);
+        
+        const videoFile = files.find(f => f.endsWith('.mp4') || f.endsWith('.mkv') || f.endsWith('.webm'));
+        if (videoFile) {
+          const fullPath = join(outputDir, videoFile);
+          console.log('[DOWNLOAD] Found video file:', fullPath);
+          resolve(fullPath);
+        } else {
+          reject(new Error('No video file found after download'));
+        }
+      } else {
+        reject(new Error(`yt-dlp exited with code ${code}`));
+      }
+    });
+
+    process.on('error', (error) => {
+      reject(new Error(`Failed to start yt-dlp: ${error.message}`));
+    });
+  });
+}
 
 export async function POST(request: NextRequest) {
+  let tempDir = '';
+  let outputPath = '';
+  
   try {
     const { url } = await request.json();
 
@@ -24,7 +129,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate YouTube URL
-    if (!ytdl.validateURL(url)) {
+    if (!validateYouTubeURL(url)) {
       return NextResponse.json(
         { error: 'INVALID_URL' },
         { status: 400 }
@@ -33,183 +138,63 @@ export async function POST(request: NextRequest) {
 
     console.log('[DOWNLOAD] Starting download for:', url);
 
-    // Get video info
-    const info = await ytdl.getInfo(url);
-    const title = info.videoDetails.title.replace(/[^\w\s-]/g, '');
-    
+    // Get video title
+    const title = await getVideoTitle(url);
     console.log('[DOWNLOAD] Video title:', title);
-    console.log('[DOWNLOAD] Total formats available:', info.formats.length);
 
-    // Get best video-only format (for HD quality)
-    const videoFormats = info.formats.filter(
-      format => format.hasVideo && !format.hasAudio
-    );
-    const videoFormat = videoFormats.sort((a, b) => {
-      const heightA = a.height || 0;
-      const heightB = b.height || 0;
-      return heightB - heightA;
-    })[0];
+    // Create unique temp directory for this download
+    tempDir = join(tmpdir(), `yt-download-${Date.now()}`);
+    mkdirSync(tempDir, { recursive: true });
+    console.log('[DOWNLOAD] Created temp dir:', tempDir);
 
-    // Get best audio-only format
-    const audioFormats = info.formats.filter(
-      format => format.hasAudio && !format.hasVideo
-    );
-    const audioFormat = audioFormats.sort((a, b) => {
-      const bitrateA = a.audioBitrate || 0;
-      const bitrateB = b.audioBitrate || 0;
-      return bitrateB - bitrateA;
-    })[0];
+    // Download with yt-dlp - returns the actual file path
+    outputPath = await downloadWithYtDlp(url, tempDir);
 
-    if (!videoFormat || !audioFormat) {
-      console.error('[DOWNLOAD] Missing formats - video:', !!videoFormat, 'audio:', !!audioFormat);
-      return NextResponse.json(
-        { error: 'NO_SUITABLE_FORMAT' },
-        { status: 500 }
-      );
+    // Verify file exists
+    if (!existsSync(outputPath)) {
+      throw new Error('Download completed but file not found');
     }
 
-    console.log('[DOWNLOAD] Selected video format:', {
-      quality: videoFormat.qualityLabel,
-      height: videoFormat.height,
-      container: videoFormat.container,
-      codec: videoFormat.codecs,
-    });
-    console.log('[DOWNLOAD] Selected audio format:', {
-      bitrate: audioFormat.audioBitrate,
-      container: audioFormat.container,
-      codec: audioFormat.codecs,
-    });
+    // Get file size
+    const fileStats = statSync(outputPath);
+    const fileSize = fileStats.size;
+    console.log(`[DOWNLOAD] Final file size: ${(fileSize / (1024 * 1024)).toFixed(2)} MB`);
 
-    // Create temporary file paths
-    const tempDir = tmpdir();
-    const videoPath = join(tempDir, `video-${Date.now()}.${videoFormat.container || 'mp4'}`);
-    const audioPath = join(tempDir, `audio-${Date.now()}.${audioFormat.container || 'webm'}`);
-    const outputPath = join(tempDir, `output-${Date.now()}.mp4`);
-
-    console.log('[DOWNLOAD] Downloading video to temp file...');
-
-    // Download video to temp file
-    await new Promise<void>((resolve, reject) => {
-      const videoStream = ytdl(url, { format: videoFormat });
-      const videoFile = createWriteStream(videoPath);
-      
-      videoStream.pipe(videoFile);
-      videoStream.on('error', reject);
-      videoFile.on('error', reject);
-      videoFile.on('finish', () => {
-        console.log('[DOWNLOAD] Video download complete');
-        resolve();
-      });
-    });
-
-    console.log('[DOWNLOAD] Downloading audio to temp file...');
-
-    // Download audio to temp file
-    await new Promise<void>((resolve, reject) => {
-      const audioStream = ytdl(url, { format: audioFormat });
-      const audioFile = createWriteStream(audioPath);
-      
-      audioStream.pipe(audioFile);
-      audioStream.on('error', reject);
-      audioFile.on('error', reject);
-      audioFile.on('finish', () => {
-        console.log('[DOWNLOAD] Audio download complete');
-        resolve();
-      });
-    });
-
-    console.log('[DOWNLOAD] Starting FFmpeg merge...');
-
-    // Merge video and audio using ffmpeg
-    await new Promise<void>((resolve, reject) => {
-      ffmpeg()
-        .input(videoPath)
-        .input(audioPath)
-        .outputOptions([
-          '-c:v copy',      // Copy video codec (no re-encoding)
-          '-c:a aac',       // Convert audio to AAC
-          '-movflags frag_keyframe+empty_moov' // Enable streaming
-        ])
-        .output(outputPath)
-        .on('start', (cmd) => {
-          console.log('[DOWNLOAD] FFmpeg command:', cmd);
-        })
-        .on('progress', (progress) => {
-          console.log('[DOWNLOAD] Processing:', progress.percent?.toFixed(1) + '%');
-        })
-        .on('error', (error) => {
-          console.error('[DOWNLOAD] FFmpeg error:', error);
-          reject(error);
-        })
-        .on('end', () => {
-          console.log('[DOWNLOAD] FFmpeg merge complete');
-          resolve();
-        })
-        .run();
-    });
-
-    // Create read stream from merged file
+    // Create read stream
     const fileStream = createReadStream(outputPath);
 
     // Set headers for download
     const headers = new Headers();
     headers.set('Content-Disposition', `attachment; filename="${title}.mp4"`);
     headers.set('Content-Type', 'video/mp4');
+    headers.set('Content-Length', fileSize.toString());
 
     // Convert Node.js stream to Web ReadableStream
+    // Capture tempDir for cleanup in closures
+    const cleanupDir = tempDir;
+    
     const webStream = new ReadableStream({
       async start(controller) {
         fileStream.on('data', (chunk) => {
           controller.enqueue(chunk);
         });
 
-        fileStream.on('end', async () => {
-          console.log('[DOWNLOAD] Stream completed, cleaning up temp files...');
+        fileStream.on('end', () => {
+          console.log('[DOWNLOAD] Stream completed, cleaning up...');
           controller.close();
-          
-          // Clean up temp files
-          try {
-            await Promise.all([
-              unlinkAsync(videoPath),
-              unlinkAsync(audioPath),
-              unlinkAsync(outputPath)
-            ]);
-            console.log('[DOWNLOAD] Temp files cleaned up');
-          } catch (cleanupError) {
-            console.error('[DOWNLOAD] Cleanup error:', cleanupError);
-          }
+          cleanupTempDir(cleanupDir);
         });
 
-        fileStream.on('error', async (error) => {
+        fileStream.on('error', (error) => {
           console.error('[DOWNLOAD] Stream error:', error);
           controller.error(error);
-          
-          // Clean up temp files on error
-          try {
-            await Promise.all([
-              unlinkAsync(videoPath).catch(() => {}),
-              unlinkAsync(audioPath).catch(() => {}),
-              unlinkAsync(outputPath).catch(() => {})
-            ]);
-          } catch (cleanupError) {
-            console.error('[DOWNLOAD] Cleanup error:', cleanupError);
-          }
+          cleanupTempDir(cleanupDir);
         });
       },
-      async cancel() {
+      cancel() {
         console.log('[DOWNLOAD] Stream cancelled, cleaning up...');
         fileStream.destroy();
-        
-        // Clean up temp files
-        try {
-          await Promise.all([
-            unlinkAsync(videoPath).catch(() => {}),
-            unlinkAsync(audioPath).catch(() => {}),
-            unlinkAsync(outputPath).catch(() => {})
-          ]);
-        } catch (cleanupError) {
-          console.error('[DOWNLOAD] Cleanup error:', cleanupError);
-        }
+        cleanupTempDir(cleanupDir);
       }
     });
 
@@ -219,8 +204,10 @@ export async function POST(request: NextRequest) {
     console.error('[DOWNLOAD] Error details:', {
       name: error instanceof Error ? error.name : 'Unknown',
       message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
     });
+
+    // Clean up on error
+    cleanupTempDir(tempDir);
     
     return NextResponse.json(
       { 
