@@ -56,6 +56,19 @@ See [TESTING.md](./TESTING.md) for details.
 - Vitest + React Testing Library
 - @distube/ytdl-core
 
+### TODO:
+
+Important note: Deploying to Vercel won't work with yt-dlp because:
+
+- Vercel's serverless functions don't have yt-dlp installed
+- You can't install system binaries on Vercel
+
+For Vercel deployment, you'd need to either:
+
+- Use a Node.js library like @distube/ytdl-core (which had the cipher issues)
+- Deploy to a VPS/container where you can install yt-dlp
+- Use an external API service
+
 ---
 
 **YT_EXTRACT_SYSTEM © 2026**
