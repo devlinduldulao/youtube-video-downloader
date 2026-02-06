@@ -56,6 +56,11 @@ See [TESTING.md](./TESTING.md) for details.
 - Vitest + React Testing Library
 - @distube/ytdl-core
 
+### BUG
+
+But while deploying to vercel, the build got an error saying: Deploying outputs...
+Error: Builder returned invalid maxDuration value for Serverless Function "api/download". Serverless Functions must have a maxDuration between 1 and 300 for plan hobby. : https://vercel.com/docs/concepts/limits/overview#serverless-function-execution-timeout
+
 ### TODO:
 
 Important note: Deploying to Vercel won't work with yt-dlp because:
