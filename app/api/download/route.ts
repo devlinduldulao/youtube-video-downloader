@@ -19,6 +19,9 @@ function cleanupTempDir(dir: string) {
 // Full path to yt-dlp executable
 const YT_DLP_PATH = 'C:\\Users\\DEVDUL\\AppData\\Local\\Microsoft\\WinGet\\Links\\yt-dlp.exe';
 
+// Full path to FFmpeg binary directory (required for merging video+audio streams)
+const FFMPEG_PATH = 'C:\\Users\\DEVDUL\\AppData\\Local\\Microsoft\\WinGet\\Packages\\yt-dlp.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-N-122319-gf6a95c7eb7-win64-gpl\\bin';
+
 // Route segment config - extend timeout for longer videos (1+ hour)
 export const maxDuration = 3600; // 60 minutes max execution time
 export const dynamic = 'force-dynamic';
@@ -66,6 +69,7 @@ async function downloadWithYtDlp(url: string, outputDir: string): Promise<string
     const process = spawn(YT_DLP_PATH, [
       '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
       '--merge-output-format', 'mp4',
+      '--ffmpeg-location', FFMPEG_PATH,
       '-o', outputTemplate,
       '--no-warnings',
       '--no-check-certificates',
