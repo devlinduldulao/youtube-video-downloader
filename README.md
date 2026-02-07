@@ -74,6 +74,44 @@ For Vercel deployment, you'd need to either:
 - Deploy to a VPS/container where you can install yt-dlp
 - Use an external API service
 
+#### OR Backend for frontend architecture where the backend handles yt-dlp and the frontend is deployed on Vercel.
+
+### Architecture:
+
+```
+┌─────────────────────┐         ┌─────────────────────┐
+│   Frontend (Vercel) │ ──────► │  Backend API Server │
+│   Next.js UI only   │         │  (yt-dlp installed) │
+└─────────────────────┘         └─────────────────────┘
+                                         │
+                                         ▼
+                                    ┌─────────┐
+                                    │ YouTube │
+                                    └─────────┘
+```
+
+### How it works:
+1. **Frontend (Vercel)**: Just serves the UI, proxies requests to backend
+2. **Backend (Railway/Render/Fly.io/VPS)**: Runs yt-dlp, handles downloads, no time limits
+
+### Benefits:
+- ✅ No Vercel timeout limits on the backend
+- ✅ yt-dlp can be installed on the backend server
+- ✅ Frontend stays lightweight and deploys fast
+- ✅ Backend can use longer timeouts (1+ hour videos)
+- ✅ Can scale backend independently
+
+### Backend options (free/cheap tiers available):
+- **Railway** - Easy Docker deployment
+- **Render** - Has background workers
+- **Fly.io** - Good for long-running processes
+- **DigitalOcean App Platform** - Reliable
+- **Any VPS** - Full control
+
+Possible Stack for Backend:
+1. Create a separate Express/Fastify backend project for the download API
+2. Update the frontend to call the external backend API
+
 ---
 
 **YT_EXTRACT_SYSTEM © 2026**
