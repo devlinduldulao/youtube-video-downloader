@@ -16,11 +16,27 @@ function cleanupTempDir(dir: string) {
   }
 }
 
-// Full path to yt-dlp executable
-const YT_DLP_PATH = 'C:\\Users\\DEVDUL\\AppData\\Local\\Microsoft\\WinGet\\Links\\yt-dlp.exe';
+/**
+ * Path to yt-dlp executable.
+ * Set via YT_DLP_PATH environment variable or defaults to 'yt-dlp' (assumes it's in PATH).
+ * 
+ * Installation:
+ * - Windows: winget install yt-dlp
+ * - macOS: brew install yt-dlp
+ * - Linux: sudo apt install yt-dlp (or pip install yt-dlp)
+ */
+const YT_DLP_PATH = process.env.YT_DLP_PATH || 'yt-dlp';
 
-// Full path to FFmpeg binary directory (required for merging video+audio streams)
-const FFMPEG_PATH = 'C:\\Users\\DEVDUL\\AppData\\Local\\Microsoft\\WinGet\\Packages\\yt-dlp.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-N-122319-gf6a95c7eb7-win64-gpl\\bin';
+/**
+ * Path to FFmpeg binary directory (required for merging video+audio streams).
+ * Set via FFMPEG_PATH environment variable or defaults to 'ffmpeg' (assumes it's in PATH).
+ * 
+ * Installation:
+ * - Windows: winget install ffmpeg
+ * - macOS: brew install ffmpeg
+ * - Linux: sudo apt install ffmpeg
+ */
+const FFMPEG_PATH = process.env.FFMPEG_PATH || '';
 
 // Route segment config - extend timeout for longer videos (1+ hour)
 export const maxDuration = 3600; // 60 minutes max execution time
@@ -66,16 +82,23 @@ async function downloadWithYtDlp(url: string, outputDir: string): Promise<string
     
     const outputTemplate = join(outputDir, 'video.%(ext)s');
     
-    const process = spawn(YT_DLP_PATH, [
+    const args = [
       '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
       '--merge-output-format', 'mp4',
-      '--ffmpeg-location', FFMPEG_PATH,
       '-o', outputTemplate,
       '--no-warnings',
       '--no-check-certificates',
       '--progress',
-      url
-    ]);
+    ];
+
+    // Only add --ffmpeg-location if explicitly set (otherwise yt-dlp uses system PATH)
+    if (FFMPEG_PATH) {
+      args.push('--ffmpeg-location', FFMPEG_PATH);
+    }
+
+    args.push(url);
+
+    const process = spawn(YT_DLP_PATH, args);
 
     process.stdout.on('data', (data) => {
       const output = data.toString().trim();

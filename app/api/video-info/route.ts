@@ -5,8 +5,11 @@ import { spawn } from 'child_process';
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-// Full path to yt-dlp executable
-const YT_DLP_PATH = 'C:\\Users\\DEVDUL\\AppData\\Local\\Microsoft\\WinGet\\Links\\yt-dlp.exe';
+/**
+ * Path to yt-dlp executable.
+ * Set via YT_DLP_PATH environment variable or defaults to 'yt-dlp' (assumes it's in PATH).
+ */
+const YT_DLP_PATH = process.env.YT_DLP_PATH || 'yt-dlp';
 
 // YouTube URL validation regex
 const YOUTUBE_URL_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)[\w-]+/;

@@ -14,6 +14,44 @@ A modern, high-performance YouTube video downloader built with Next.js 16, featu
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+This project requires **yt-dlp** and **FFmpeg** installed on your system:
+
+#### Windows (using winget)
+```bash
+winget install yt-dlp
+winget install ffmpeg
+```
+
+#### macOS (using Homebrew)
+```bash
+brew install yt-dlp ffmpeg
+```
+
+#### Linux (Debian/Ubuntu)
+```bash
+sudo apt install yt-dlp ffmpeg
+# OR using pip
+pip install yt-dlp
+```
+
+### Environment Setup (Optional)
+
+If yt-dlp or FFmpeg are not in your system PATH, create a `.env.local` file:
+
+```bash
+cp .env.example .env.local
+```
+
+Then edit `.env.local` with your paths:
+```env
+YT_DLP_PATH=C:\path\to\yt-dlp.exe
+FFMPEG_PATH=C:\path\to\ffmpeg\bin
+```
+
+### Run the App
+
 ```bash
 npm install
 npm run dev
