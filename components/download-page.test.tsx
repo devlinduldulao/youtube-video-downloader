@@ -303,19 +303,46 @@ describe('DownloadPage', () => {
       return user;
     }
 
+    /**
+     * Creates a mock SSE (Server-Sent Events) response for testing.
+     *
+     * The real /api/download-progress endpoint returns a text/event-stream.
+     * This helper creates a ReadableStream that emits SSE-formatted events
+     * so tests can verify the component correctly parses and displays them.
+     */
+    function createMockSseResponse(events: Array<{ event: string; data: object }>) {
+      const encoder = new TextEncoder();
+      let index = 0;
+
+      const stream = new ReadableStream({
+        pull(controller) {
+          if (index < events.length) {
+            const { event, data } = events[index];
+            const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+            controller.enqueue(encoder.encode(payload));
+            index++;
+          } else {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    }
+
     it('should trigger download and show success status', async () => {
       const user = await setupWithVideoInfo();
 
-      // Mock the download endpoint
-      const mockBlob = new Blob(['fake-video'], { type: 'video/mp4' });
+      // Mock the SSE progress endpoint
       fetchSpy.mockResolvedValueOnce(
-        new Response(mockBlob, {
-          status: 200,
-          headers: {
-            'Content-Disposition': 'attachment; filename="Never Gonna Give You Up.mp4"',
-            'Content-Type': 'video/mp4',
-          },
-        }),
+        createMockSseResponse([
+          { event: 'progress', data: { phase: 'initializing', percent: 0, overallPercent: 0, speed: null, eta: null, totalSize: null, message: 'FETCHING_METADATA...' } },
+          { event: 'progress', data: { phase: 'downloading_video', percent: 100, overallPercent: 75, speed: '3.5MiB/s', eta: '00:00', totalSize: '50MiB', message: 'EXTRACTING_VIDEO_STREAM...' } },
+          { event: 'complete', data: { downloadId: 'dl-test-123', filename: 'Never Gonna Give You Up.mp4', fileSize: 52428800, fileSizeMB: '50.00 MB' } },
+        ]),
       );
 
       await user.click(screen.getByText('EXECUTE_DOWNLOAD'));
@@ -324,16 +351,16 @@ describe('DownloadPage', () => {
         expect(screen.getByText('EXTRACTION_COMPLETE')).toBeInTheDocument();
       });
 
-      // Verify the download API was called
-      expect(fetchSpy).toHaveBeenCalledWith('/api/download', {
+      // Verify the SSE progress endpoint was called (not the old /api/download)
+      expect(fetchSpy).toHaveBeenCalledWith('/api/download-progress', expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: 'https://youtube.com/watch?v=dQw4w9WgXcQ' }),
-      });
+      }));
 
       // Toast should have been called
-      expect(toast.loading).toHaveBeenCalledWith('Initiating download protocol...');
-      expect(toast.success).toHaveBeenCalledWith('Download successfully executed!', expect.objectContaining({
+      expect(toast.loading).toHaveBeenCalledWith('Initiating extraction protocol...');
+      expect(toast.success).toHaveBeenCalledWith('Extraction complete!', expect.objectContaining({
         id: 'toast-id',
       }));
     });
@@ -341,7 +368,7 @@ describe('DownloadPage', () => {
     it('should show EXTRACTING text during download', async () => {
       const user = await setupWithVideoInfo();
 
-      // Never-resolving promise
+      // Never-resolving promise to keep the component in "downloading" state
       let resolveDownload: (value: Response) => void;
       fetchSpy.mockReturnValueOnce(
         new Promise((resolve) => {
@@ -353,13 +380,16 @@ describe('DownloadPage', () => {
 
       expect(screen.getByText('EXTRACTING')).toBeInTheDocument();
 
-      // Clean up
-      resolveDownload!(new Response(new Blob(['data']), { status: 200 }));
+      // Clean up by resolving with a minimal SSE stream
+      resolveDownload!(createMockSseResponse([
+        { event: 'complete', data: { downloadId: 'dl-cleanup', filename: 'video.mp4', fileSize: 100, fileSizeMB: '0.00 MB' } },
+      ]));
     });
 
     it('should show error toast when download fails', async () => {
       const user = await setupWithVideoInfo();
 
+      // HTTP-level error (server returns 500 before SSE stream starts)
       fetchSpy.mockResolvedValueOnce(
         new Response(JSON.stringify({ error: 'DOWNLOAD_FAILED' }), {
           status: 500,
@@ -377,15 +407,12 @@ describe('DownloadPage', () => {
     it('should display download file details after success', async () => {
       const user = await setupWithVideoInfo();
 
-      const mockBlob = new Blob(['data'], { type: 'video/mp4' });
+      // Mock SSE response with a specific filename from the "complete" event
       fetchSpy.mockResolvedValueOnce(
-        new Response(mockBlob, {
-          status: 200,
-          headers: {
-            'Content-Disposition': 'attachment; filename="cool-video.mp4"',
-            'Content-Type': 'video/mp4',
-          },
-        }),
+        createMockSseResponse([
+          { event: 'progress', data: { phase: 'downloading_video', percent: 100, overallPercent: 100, speed: null, eta: null, totalSize: null, message: 'EXTRACTION_COMPLETE' } },
+          { event: 'complete', data: { downloadId: 'dl-456', filename: 'cool-video.mp4', fileSize: 1024, fileSizeMB: '0.00 MB' } },
+        ]),
       );
 
       await user.click(screen.getByText('EXECUTE_DOWNLOAD'));
@@ -396,21 +423,21 @@ describe('DownloadPage', () => {
       });
     });
 
-    it('should use "download.mp4" as default filename when header is missing', async () => {
+    it('should handle SSE error events during download', async () => {
       const user = await setupWithVideoInfo();
 
-      const mockBlob = new Blob(['data'], { type: 'video/mp4' });
+      // Mock SSE stream that sends an error event mid-download
       fetchSpy.mockResolvedValueOnce(
-        new Response(mockBlob, {
-          status: 200,
-          // No Content-Disposition header
-        }),
+        createMockSseResponse([
+          { event: 'progress', data: { phase: 'downloading_video', percent: 30, overallPercent: 22, speed: '1.5MiB/s', eta: '00:30', totalSize: '50MiB', message: 'EXTRACTING_VIDEO_STREAM...' } },
+          { event: 'error', data: { message: 'yt-dlp exited with code 1' } },
+        ]),
       );
 
       await user.click(screen.getByText('EXECUTE_DOWNLOAD'));
 
       await waitFor(() => {
-        expect(screen.getByText(/download\.mp4/)).toBeInTheDocument();
+        expect(toast.error).toHaveBeenCalled();
       });
     });
   });

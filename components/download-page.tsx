@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,32 @@ interface DownloadStatus {
     quality: string;
 }
 
+/**
+ * Progress data received via SSE from the /api/download-progress endpoint.
+ *
+ * ## Phases
+ * - `initializing`: Fetching video metadata with yt-dlp --get-title
+ * - `downloading_video`: Downloading the video stream (0–75% overall)
+ * - `downloading_audio`: Downloading the audio stream (75–90% overall)
+ * - `merging`: FFmpeg merging video + audio into a single MP4 (90–98%)
+ * - `complete`: File is ready for download
+ * - `error`: Something went wrong
+ *
+ * ## Why overallPercent?
+ * yt-dlp downloads video and audio as separate streams, each going 0–100%.
+ * `overallPercent` maps both into a single 0–100% range so the progress
+ * bar never goes backwards — much better UX.
+ */
+interface DownloadProgress {
+    phase: 'initializing' | 'downloading_video' | 'downloading_audio' | 'merging' | 'complete' | 'error';
+    percent: number;
+    overallPercent: number;
+    speed: string | null;
+    eta: string | null;
+    totalSize: string | null;
+    message: string;
+}
+
 export function DownloadPage() {
     const [url, setUrl] = useState('');
     const [loading, setLoading] = useState(false);
@@ -33,6 +59,11 @@ export function DownloadPage() {
     const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
     const [downloadStatus, setDownloadStatus] = useState<DownloadStatus | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [progress, setProgress] = useState<DownloadProgress | null>(null);
+
+    // AbortController ref lets us cancel the SSE stream if the user
+    // navigates away or clicks cancel
+    const abortControllerRef = useRef<AbortController | null>(null);
 
     const handleFetchInfo = async () => {
         if (!url.trim()) return;
@@ -63,19 +94,84 @@ export function DownloadPage() {
         }
     };
 
+    /**
+     * Trigger the browser's native file download using an invisible <a> tag.
+     *
+     * Why an <a> tag instead of window.location?
+     * - The `download` attribute suggests a filename to the browser
+     * - It doesn't navigate away from the page
+     * - Works with the /api/download-file endpoint that returns the binary file
+     */
+    const triggerFileDownload = useCallback((downloadId: string, filename: string) => {
+        const a = document.createElement('a');
+        a.href = `/api/download-file?id=${encodeURIComponent(downloadId)}`;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }, []);
+
+    /**
+     * Parse SSE (Server-Sent Events) text into structured events.
+     *
+     * SSE format:
+     *   event: progress\n
+     *   data: {"percent": 45.2, ...}\n
+     *   \n
+     *
+     * The double newline (\n\n) marks the end of an event.
+     * We accumulate text in a buffer because reader.read() chunks
+     * don't necessarily align with event boundaries.
+     */
+    const parseSseEvents = useCallback((text: string): Array<{ type: string; data: string }> => {
+        const events: Array<{ type: string; data: string }> = [];
+        const rawEvents = text.split('\n\n');
+
+        for (const rawEvent of rawEvents) {
+            if (!rawEvent.trim()) continue;
+
+            const lines = rawEvent.split('\n');
+            let eventType = '';
+            let eventData = '';
+
+            for (const line of lines) {
+                if (line.startsWith('event: ')) eventType = line.slice(7);
+                if (line.startsWith('data: ')) eventData = line.slice(6);
+            }
+
+            if (eventType && eventData) {
+                events.push({ type: eventType, data: eventData });
+            }
+        }
+
+        return events;
+    }, []);
+
     const executeDownload = async () => {
         if (!url.trim()) return;
 
         setDownloading(true);
         setError(null);
         setDownloadStatus(null);
-        const toastId = toast.loading('Initiating download protocol...');
+        setProgress(null);
+
+        // Create an AbortController so we can cancel if needed
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
+        const toastId = toast.loading('Initiating extraction protocol...');
 
         try {
-            const response = await fetch('/api/download', {
+            /**
+             * Instead of calling /api/download (which gives no progress),
+             * we call /api/download-progress which returns an SSE stream.
+             * Each event contains real-time progress data from yt-dlp.
+             */
+            const response = await fetch('/api/download-progress', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: url.trim() }),
+                signal: controller.signal,
             });
 
             if (!response.ok) {
@@ -83,46 +179,71 @@ export function DownloadPage() {
                 throw new Error(errorData.error || 'DOWNLOAD_FAILED');
             }
 
-            // Get filename from header if available
-            const disposition = response.headers.get('Content-Disposition');
-            let filename = 'download.mp4';
-            if (disposition && disposition.indexOf('attachment') !== -1) {
-                const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-                const matches = filenameRegex.exec(disposition);
-                if (matches != null && matches[1]) {
-                    filename = matches[1].replace(/['"]/g, '');
+            // Read the SSE stream using the Streams API
+            const reader = response.body!.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                // Append new data to buffer and process complete events
+                buffer += decoder.decode(value, { stream: true });
+
+                // Split on double newline (SSE event delimiter)
+                const parts = buffer.split('\n\n');
+                // Last part may be incomplete — keep it in the buffer
+                buffer = parts.pop() || '';
+
+                const events = parseSseEvents(parts.join('\n\n'));
+
+                for (const event of events) {
+                    if (event.type === 'progress') {
+                        const data = JSON.parse(event.data) as DownloadProgress;
+                        setProgress(data);
+
+                        // Update toast with current phase
+                        toast.loading(data.message, { id: toastId });
+                    } else if (event.type === 'complete') {
+                        const data = JSON.parse(event.data) as {
+                            downloadId: string;
+                            filename: string;
+                            fileSize: number;
+                            fileSizeMB: string;
+                        };
+
+                        // Trigger the actual file download via the browser
+                        triggerFileDownload(data.downloadId, data.filename);
+
+                        setDownloadStatus({
+                            filename: data.filename,
+                            path: 'System Downloads Folder',
+                            quality: videoInfo?.quality || 'High',
+                        });
+
+                        toast.success('Extraction complete!', {
+                            id: toastId,
+                            description: `${data.filename} (${data.fileSizeMB}) saved to downloads.`,
+                        });
+                    } else if (event.type === 'error') {
+                        const data = JSON.parse(event.data) as { message: string };
+                        throw new Error(data.message);
+                    }
                 }
             }
-
-            // Handle binary blob download
-            const blob = await response.blob();
-            const downloadUrl = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(downloadUrl);
-            document.body.removeChild(a);
-
-            const successStatus = {
-                filename: filename,
-                path: 'System Downloads Folder',
-                quality: videoInfo?.quality || 'High'
-            };
-
-            setDownloadStatus(successStatus);
-            toast.success('Download successfully executed!', {
-                id: toastId,
-                description: `File ${filename} saved to downloads.`
-            });
-
         } catch (err) {
-            const errorMsg = err instanceof Error ? `DOWNLOAD_ERROR: ${err.message}` : 'EXTRACTION_FAILED';
-            setError(errorMsg);
-            toast.error(errorMsg, { id: toastId });
+            if (err instanceof Error && err.name === 'AbortError') {
+                toast.info('Download cancelled.', { id: toastId });
+            } else {
+                const errorMsg = err instanceof Error ? `DOWNLOAD_ERROR: ${err.message}` : 'EXTRACTION_FAILED';
+                setError(errorMsg);
+                toast.error(errorMsg, { id: toastId });
+            }
         } finally {
             setDownloading(false);
+            setProgress(null);
+            abortControllerRef.current = null;
         }
     };
 
@@ -379,6 +500,76 @@ export function DownloadPage() {
                                         </Button>
                                     </div>
 
+                                    {/* ── Download Progress Section ────────────────── */}
+                                    <AnimatePresence>
+                                        {downloading && progress && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                                                className="space-y-4 pt-2 overflow-hidden"
+                                            >
+                                                {/* Phase label + percentage */}
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2 h-2 bg-[var(--color-brand-lime)] animate-pulse" />
+                                                        <span className="text-[10px] tracking-[0.2em] text-muted-foreground uppercase">
+                                                            {progress.phase === 'initializing' && 'INITIALIZING_PROTOCOL'}
+                                                            {progress.phase === 'downloading_video' && 'EXTRACTING_VIDEO'}
+                                                            {progress.phase === 'downloading_audio' && 'EXTRACTING_AUDIO'}
+                                                            {progress.phase === 'merging' && 'MERGING_STREAMS'}
+                                                        </span>
+                                                    </div>
+                                                    <span className="text-sm font-bold text-[var(--color-brand-lime)] font-mono tabular-nums">
+                                                        {progress.overallPercent}%
+                                                    </span>
+                                                </div>
+
+                                                {/* Progress bar */}
+                                                <div className="h-1.5 bg-border/30 overflow-hidden relative">
+                                                    <motion.div
+                                                        className="h-full bg-[var(--color-brand-lime)]"
+                                                        initial={{ width: 0 }}
+                                                        animate={{ width: `${progress.overallPercent}%` }}
+                                                        transition={{ duration: 0.5, ease: 'easeOut' }}
+                                                    />
+                                                    {/* Animated scanline effect over the bar */}
+                                                    <div
+                                                        className="absolute inset-0 opacity-30"
+                                                        style={{
+                                                            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%)',
+                                                            backgroundSize: '200% 100%',
+                                                            animation: 'shimmer 1.5s infinite linear',
+                                                        }}
+                                                    />
+                                                </div>
+
+                                                {/* Stats row */}
+                                                <div className="grid grid-cols-3 gap-2 text-[10px] font-mono">
+                                                    <div className="border-l-2 border-border pl-3 py-1 transition-colors duration-300">
+                                                        <span className="text-muted-foreground block tracking-widest">SPEED</span>
+                                                        <span className="text-[var(--color-brand-lime)] font-bold">
+                                                            {progress.speed || '—'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="border-l-2 border-border pl-3 py-1 transition-colors duration-300">
+                                                        <span className="text-muted-foreground block tracking-widest">ETA</span>
+                                                        <span className="text-[var(--color-brand-lime)] font-bold">
+                                                            {progress.eta || '—'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="border-l-2 border-border pl-3 py-1 transition-colors duration-300">
+                                                        <span className="text-muted-foreground block tracking-widest">SIZE</span>
+                                                        <span className="text-[var(--color-brand-lime)] font-bold">
+                                                            {progress.totalSize || '—'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
                                     <div className="pt-4 border-t border-border">
                                         <p className="text-[10px] text-muted-foreground leading-relaxed font-mono">
                                             NOTICE: File will be saved to your system&apos;s Downloads directory.
@@ -398,7 +589,7 @@ export function DownloadPage() {
             <footer className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-sm py-2 px-6 transition-colors duration-300">
                 <div className="flex justify-between items-center text-[10px] text-muted-foreground tracking-wider">
                     <div>
-                        <span>STATUS: {loading || downloading ? 'ACTIVE' : 'READY'}</span>
+                        <span>STATUS: {downloading && progress ? progress.message : loading || downloading ? 'ACTIVE' : 'READY'}</span>
                     </div>
                     <div>
                         YT_EXTRACT_SYSTEM © 2026
