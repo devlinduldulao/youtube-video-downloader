@@ -69,11 +69,11 @@ async function getVideoInfo(url: string): Promise<VideoInfo> {
             title: info.title,
             author: info.uploader || info.channel || 'Unknown',
             thumbnail: info.thumbnail,
-            quality: bestFormat?.format_note || bestFormat?.height ? `${bestFormat.height}p` : 'HD',
+            quality: bestFormat?.height ? `${bestFormat.height}p` : bestFormat?.format_note || 'HD',
             lengthSeconds: String(info.duration || 0),
             viewCount: String(info.view_count || 0),
           });
-        } catch (parseError) {
+        } catch {
           reject(new Error('Failed to parse video info'));
         }
       } else {

@@ -8,7 +8,7 @@ A modern, high-performance YouTube video downloader built with Next.js 16, featu
 - ⚡ **Fast & Efficient**: Built with Next.js 16 and Turbopack
 - 🎨 **Unique Design**: Cyberpunk-inspired UI with Unbounded & JetBrains Mono fonts
 - 📱 **Responsive**: Works on desktop and mobile
-- 🧪 **Fully Tested**: 30 comprehensive unit tests (100% passing)
+- 🧪 **Fully Tested**: 114 comprehensive unit tests (100% passing)
 - 🎭 **Smooth Animations**: Framer Motion powered interactions
 - 🔒 **Type-Safe**: Built with TypeScript
 

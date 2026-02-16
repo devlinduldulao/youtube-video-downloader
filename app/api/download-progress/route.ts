@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { spawn, type ChildProcess } from 'child_process';
-import { existsSync, statSync, readdirSync, mkdirSync } from 'fs';
+import { existsSync, statSync, readdirSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { storeDownload } from '@/lib/download-store';
@@ -121,6 +121,18 @@ function getVideoTitle(url: string): Promise<string> {
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
   let ytDlpProcess: ChildProcess | null = null;
+  let activeTempDir = '';
+  let keepTempDir = false;
+
+  function cleanupTempDir(dir: string): void {
+    try {
+      if (dir && existsSync(dir)) {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    } catch (error) {
+      console.error('[DOWNLOAD-PROGRESS] Failed to clean up temp dir:', error);
+    }
+  }
 
   /**
    * Helper to send an SSE event through the stream controller.
@@ -163,6 +175,9 @@ export async function POST(request: NextRequest) {
         ytDlpProcess.kill('SIGTERM');
         ytDlpProcess = null;
       }
+      if (!keepTempDir) {
+        cleanupTempDir(activeTempDir);
+      }
     });
 
     const stream = new ReadableStream({
@@ -194,6 +209,7 @@ export async function POST(request: NextRequest) {
 
           // Create isolated temp directory for this download
           const tempDir = join(tmpdir(), `yt-download-${Date.now()}`);
+          activeTempDir = tempDir;
           mkdirSync(tempDir, { recursive: true });
           const outputTemplate = join(tempDir, 'video.%(ext)s');
 
@@ -354,6 +370,7 @@ export async function POST(request: NextRequest) {
             tempDir,
             createdAt: Date.now(),
           });
+          keepTempDir = true;
 
           // Send 100% before complete for smooth UI transition
           sendSSE(controller, 'progress', {
@@ -378,6 +395,9 @@ export async function POST(request: NextRequest) {
           );
         } catch (error) {
           console.error('[DOWNLOAD-PROGRESS] Error:', error);
+          if (!keepTempDir) {
+            cleanupTempDir(activeTempDir);
+          }
           sendSSE(controller, 'error', {
             message:
               error instanceof Error ? error.message : 'DOWNLOAD_FAILED',
@@ -393,6 +413,9 @@ export async function POST(request: NextRequest) {
           console.log('[DOWNLOAD-PROGRESS] Stream cancelled, killing yt-dlp');
           ytDlpProcess.kill('SIGTERM');
           ytDlpProcess = null;
+        }
+        if (!keepTempDir) {
+          cleanupTempDir(activeTempDir);
         }
       },
     });
