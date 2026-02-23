@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import { createReadStream, statSync, existsSync, readdirSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
 // Helper to clean up temp directory
 function cleanupTempDir(dir: string) {
@@ -35,8 +36,11 @@ const YT_DLP_PATH = process.env.YT_DLP_PATH || 'yt-dlp';
  * - Windows: winget install ffmpeg
  * - macOS: brew install ffmpeg
  * - Linux: sudo apt install ffmpeg
+ *
+ * Falls back to @ffmpeg-installer/ffmpeg, which ships a pre-built binary for
+ * macOS (x64 + arm64), Windows, and Linux — no manual install needed.
  */
-const FFMPEG_PATH = process.env.FFMPEG_PATH || '';
+const FFMPEG_PATH = process.env.FFMPEG_PATH || ffmpegInstaller.path;
 
 // Route segment config - extend timeout for longer videos (1+ hour)
 export const maxDuration = 3600; // 60 minutes max execution time
@@ -52,19 +56,19 @@ function validateYouTubeURL(url: string): boolean {
 // Get video title using yt-dlp
 async function getVideoTitle(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const process = spawn(YT_DLP_PATH, ['--get-title', '--no-warnings', '--no-check-certificates', url]);
+    const proc = spawn(YT_DLP_PATH, ['--get-title', '--no-warnings', '--no-check-certificates', url]);
     let title = '';
     let error = '';
 
-    process.stdout.on('data', (data) => {
+    proc.stdout.on('data', (data) => {
       title += data.toString();
     });
 
-    process.stderr.on('data', (data) => {
+    proc.stderr.on('data', (data) => {
       error += data.toString();
     });
 
-    process.on('close', (code) => {
+    proc.on('close', (code) => {
       if (code === 0) {
         resolve(title.trim().replace(/[^\w\s-]/g, '') || 'video');
       } else {
@@ -98,23 +102,23 @@ async function downloadWithYtDlp(url: string, outputDir: string): Promise<string
 
     args.push(url);
 
-    const process = spawn(YT_DLP_PATH, args);
+    const proc = spawn(YT_DLP_PATH, args);
 
-    process.stdout.on('data', (data) => {
+    proc.stdout.on('data', (data) => {
       const output = data.toString().trim();
       if (output) {
         console.log('[DOWNLOAD]', output);
       }
     });
 
-    process.stderr.on('data', (data) => {
+    proc.stderr.on('data', (data) => {
       const output = data.toString().trim();
       if (output) {
         console.log('[DOWNLOAD] yt-dlp:', output);
       }
     });
 
-    process.on('close', (code) => {
+    proc.on('close', (code) => {
       if (code === 0) {
         console.log('[DOWNLOAD] yt-dlp process complete');
         
@@ -135,7 +139,7 @@ async function downloadWithYtDlp(url: string, outputDir: string): Promise<string
       }
     });
 
-    process.on('error', (error) => {
+    proc.on('error', (error) => {
       reject(new Error(`Failed to start yt-dlp: ${error.message}`));
     });
   });

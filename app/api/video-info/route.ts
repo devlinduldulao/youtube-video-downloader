@@ -31,7 +31,8 @@ interface VideoInfo {
 // Get video info using yt-dlp
 async function getVideoInfo(url: string): Promise<VideoInfo> {
   return new Promise((resolve, reject) => {
-    const process = spawn(YT_DLP_PATH, [
+    // Named 'proc' to avoid shadowing Node's global `process` object
+    const proc = spawn(YT_DLP_PATH, [
       '--dump-json',
       '--no-warnings',
       '--no-download',
@@ -42,15 +43,15 @@ async function getVideoInfo(url: string): Promise<VideoInfo> {
     let jsonOutput = '';
     let error = '';
 
-    process.stdout.on('data', (data) => {
+    proc.stdout.on('data', (data) => {
       jsonOutput += data.toString();
     });
 
-    process.stderr.on('data', (data) => {
+    proc.stderr.on('data', (data) => {
       error += data.toString();
     });
 
-    process.on('close', (code) => {
+    proc.on('close', (code) => {
       if (code === 0) {
         try {
           const info = JSON.parse(jsonOutput);
@@ -81,7 +82,7 @@ async function getVideoInfo(url: string): Promise<VideoInfo> {
       }
     });
 
-    process.on('error', (err) => {
+    proc.on('error', (err) => {
       reject(new Error(`Failed to start yt-dlp: ${err.message}`));
     });
   });

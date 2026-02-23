@@ -4,6 +4,7 @@ import { existsSync, statSync, readdirSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { storeDownload } from '@/lib/download-store';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
 /**
  * SSE (Server-Sent Events) endpoint for tracking YouTube download progress.
@@ -38,7 +39,14 @@ import { storeDownload } from '@/lib/download-store';
  */
 
 const YT_DLP_PATH = process.env.YT_DLP_PATH || 'yt-dlp';
-const FFMPEG_PATH = process.env.FFMPEG_PATH || '';
+/**
+ * Path to ffmpeg binary used by yt-dlp for merging video+audio streams.
+ *
+ * Falls back to @ffmpeg-installer/ffmpeg, which ships a pre-built binary for
+ * macOS (x64 + arm64), Windows, and Linux — no manual install needed.
+ * Override with FFMPEG_PATH env var to use a system-installed ffmpeg instead.
+ */
+const FFMPEG_PATH = process.env.FFMPEG_PATH || ffmpegInstaller.path;
 
 // Allow up to 60 minutes for very long videos
 export const maxDuration = 3600;
@@ -172,7 +180,7 @@ export async function POST(request: NextRequest) {
     request.signal.addEventListener('abort', () => {
       if (ytDlpProcess) {
         console.log('[DOWNLOAD-PROGRESS] Client aborted, killing yt-dlp');
-        ytDlpProcess.kill('SIGTERM');
+        ytDlpProcess.kill();
         ytDlpProcess = null;
       }
       if (!keepTempDir) {
@@ -411,7 +419,7 @@ export async function POST(request: NextRequest) {
         // Client disconnected — kill yt-dlp to avoid orphaned processes
         if (ytDlpProcess) {
           console.log('[DOWNLOAD-PROGRESS] Stream cancelled, killing yt-dlp');
-          ytDlpProcess.kill('SIGTERM');
+          ytDlpProcess.kill();
           ytDlpProcess = null;
         }
         if (!keepTempDir) {
