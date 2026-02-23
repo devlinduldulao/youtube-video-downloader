@@ -12,8 +12,10 @@ afterEach(() => {
 vi.mock('next/image', () => ({
   __esModule: true,
   default: (props: React.ImgHTMLAttributes<HTMLImageElement> & { fill?: boolean; priority?: boolean }) => {
+    // Strip Next.js-only props that <img> doesn't understand
+    const { fill: _fill, priority: _priority, ...rest } = props;
+    // alt is spread through ...rest from the original Image props (required in next/image)
     // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
-    const { fill, priority, ...rest } = props;
     return <img {...rest} />;
   },
 }));

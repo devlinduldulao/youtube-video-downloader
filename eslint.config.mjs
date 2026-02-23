@@ -15,6 +15,18 @@ const eslintConfig = defineConfig([
     // Project-specific generated artifacts:
     "private/**",
   ]),
+  {
+    rules: {
+      // Allow variables prefixed with _ to be unused.
+      // This is the standard TypeScript convention for intentionally unused
+      // destructured values (e.g. const { _fill, ...rest } = props).
+      '@typescript-eslint/no-unused-vars': ['warn', {
+        varsIgnorePattern: '^_',
+        argsIgnorePattern: '^_',
+        destructuredArrayIgnorePattern: '^_',
+      }],
+    },
+  },
 ]);
 
 export default eslintConfig;
