@@ -1,103 +1,167 @@
-# YouTube Video Downloader - YT_EXTRACT v2.0
+# YouTube Video Downloader — YT_EXTRACT v2.0
 
-A modern, high-performance YouTube video downloader built with Next.js 16, featuring an advanced cyberpunk-inspired UI and intelligent quality selection.
+A modern YouTube video downloader built with Next.js 16, featuring real-time download progress via SSE and automatic best-quality MP4 output.
 
 ## ✨ Features
 
-- 🎯 **Smart Quality Selection**: Automatically downloads in 1080p or 720p (or highest available)
-- ⚡ **Fast & Efficient**: Built with Next.js 16 and Turbopack
-- 🎨 **Unique Design**: Cyberpunk-inspired UI with Unbounded & JetBrains Mono fonts
-- 📱 **Responsive**: Works on desktop and mobile
-- 🧪 **Fully Tested**: 114 comprehensive unit tests (100% passing)
-- 🎭 **Smooth Animations**: Framer Motion powered interactions
-- 🔒 **Type-Safe**: Built with TypeScript
+- 🎯 **Smart Quality Selection** — downloads best available video + audio, merged into MP4
+- 📊 **Real-time Progress** — live speed, ETA, and phase tracking via Server-Sent Events
+- 🖥️ **Cross-platform** — works on macOS (Intel + Apple Silicon), Windows, and Linux
+- 🔧 **Zero ffmpeg config** — bundled automatically via `@ffmpeg-installer/ffmpeg`
+- 🧪 **Fully Tested** — 114 unit tests, all passing
+- 🎨 **Cyberpunk UI** — Framer Motion animations, dark/light theme
+- 🔒 **Type-Safe** — TypeScript throughout
 
-## 🚀 Quick Start
+---
 
-### Prerequisites
+## 🖥️ OS Requirements
 
-This project requires **yt-dlp** and **FFmpeg** installed on your system:
+Only **yt-dlp** needs a one-time manual install. Everything else (including `ffmpeg`) is handled automatically by npm.
 
-#### Windows (using winget)
+| Dependency | macOS | Windows | Ubuntu/Linux |
+|---|---|---|---|
+| `yt-dlp` | Manual (see below) | Manual (see below) | Manual (see below) |
+| `ffmpeg` | ✅ Auto-bundled | ✅ Auto-bundled | ✅ Auto-bundled |
+| Downloads folder | `~/Downloads` | `C:\Users\...\Downloads` | `~/Downloads` |
+
+---
+
+## 🚀 Setup
+
+### Step 1 — Install yt-dlp (one-time per machine)
+
+**macOS**
 ```bash
-winget install yt-dlp
-winget install ffmpeg
+brew install yt-dlp
 ```
 
-#### macOS (using Homebrew)
+**Ubuntu / Linux**
 ```bash
-brew install yt-dlp ffmpeg
-```
-
-#### Linux (Debian/Ubuntu)
-```bash
-sudo apt install yt-dlp ffmpeg
-# OR using pip
+sudo apt install yt-dlp
+# or, to always get the latest version:
 pip install yt-dlp
 ```
 
-### Environment Setup (Optional)
+**Windows**
+```powershell
+winget install yt-dlp
+# or download the .exe from: https://github.com/yt-dlp/yt-dlp/releases
+```
 
-If yt-dlp or FFmpeg are not in your system PATH, create a `.env.local` file:
+### Step 2 — Install dependencies
+
+```bash
+npm install
+```
+
+### Step 3 — Configure environment (optional)
+
+If `yt-dlp` is in your PATH (true for most installs), **you can skip this step entirely.**
+
+If it's not in PATH, copy the example env file and set the path:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Then edit `.env.local` with your paths:
+Then edit `.env.local`:
+
 ```env
-YT_DLP_PATH=C:\path\to\yt-dlp.exe
-FFMPEG_PATH=C:\path\to\ffmpeg\bin
+# Point to your yt-dlp binary if it's not in PATH
+YT_DLP_PATH=/opt/homebrew/bin/yt-dlp
 ```
 
-### Run the App
+See [`.env.example`](.env.example) for all options and per-OS path examples.
+
+### Step 4 — Run
 
 ```bash
-npm install
 npm run dev
 ```
 
-Visit [http://localhost:3000](http://localhost:3000)
+Open [http://localhost:3000](http://localhost:3000)
 
-## 🎯 Quality Selection
+---
 
-**Priority Order:**
-1. **1080p** (Full HD) - First choice
-2. **720p** (HD) - Fallback  
-3. **Highest Available** - Ultimate fallback
+## ⚙️ Environment Variables
+
+All variables are **optional**. The app works out of the box if `yt-dlp` is in your PATH.
+
+| Variable | Default | Description |
+|---|---|---|
+| `YT_DLP_PATH` | `yt-dlp` | Path to the yt-dlp executable. Only set if yt-dlp is not in your PATH. |
+| `FFMPEG_PATH` | bundled binary | Path to ffmpeg. Defaults to the bundled `@ffmpeg-installer/ffmpeg` binary — no manual install needed. |
+
+### Common path values by OS
+
+**macOS — Homebrew (Apple Silicon / M1–M4)**
+```env
+YT_DLP_PATH=/opt/homebrew/bin/yt-dlp
+```
+
+**macOS — Homebrew (Intel)**
+```env
+YT_DLP_PATH=/usr/local/bin/yt-dlp
+```
+
+**Linux**
+```env
+YT_DLP_PATH=/usr/bin/yt-dlp
+```
+
+**Windows**
+```env
+YT_DLP_PATH=C:\Users\YourName\AppData\Local\Microsoft\WinGet\Links\yt-dlp.exe
+```
+
+> **Tip:** Run `which yt-dlp` (macOS/Linux) or `where yt-dlp` (Windows) to find the exact path.
+
+---
+
+## 📖 Usage
+
+1. Paste a YouTube URL into the input
+2. Click **INITIALIZE** — fetches video metadata
+3. Review title, duration, quality, and view count
+4. Click **EXECUTE_DOWNLOAD** — starts the download with live progress
+5. When complete, the browser saves the `.mp4` file to your Downloads folder
+
+---
 
 ## 🧪 Testing
 
 ```bash
-npm run test:run    # Run all tests
-npm test            # Watch mode
-npm run test:coverage
+npm run test:run      # Run all tests once
+npm test              # Watch mode
+npm run test:coverage # Coverage report
 ```
 
-**Results:** ✅ 30/30 tests passing
+**Results:** ✅ 114 tests passing across 7 test files
 
-See [TESTING.md](./TESTING.md) for details.
-
-## 📖 Usage
-
-1. Paste YouTube URL
-2. Click "INITIALIZE"  
-3. Review video info
-4. Click "EXECUTE_DOWNLOAD"
+---
 
 ## 🏗️ Tech Stack
 
-- Next.js 16 + React 19
-- TypeScript 5
-- Tailwind CSS 4
-- Framer Motion
-- Vitest + React Testing Library
-- @distube/ytdl-core
+| Category | Technology |
+|---|---|
+| Framework | Next.js 16 + React 19 |
+| Language | TypeScript 5 |
+| Styling | Tailwind CSS 4 + Framer Motion |
+| Downloader | yt-dlp (external) |
+| Muxer | ffmpeg (via `@ffmpeg-installer/ffmpeg`) |
+| Progress | Server-Sent Events (SSE) |
+| Testing | Vitest + React Testing Library |
 
-### BUG
+---
 
-But while deploying to vercel, the build got an error saying: Deploying outputs...
-Error: Builder returned invalid maxDuration value for Serverless Function "api/download". Serverless Functions must have a maxDuration between 1 and 300 for plan hobby. : https://vercel.com/docs/concepts/limits/overview#serverless-function-execution-timeout
+## 🔌 API Routes
+
+| Route | Method | Description |
+|---|---|---|
+| `/api/video-info` | POST | Fetch video metadata (title, thumbnail, quality) |
+| `/api/download-progress` | POST | SSE stream with real-time download progress |
+| `/api/download-file` | GET | Serve the completed file to the browser |
+| `/api/download` | POST | Legacy: single-request download (no progress) |
 
 ### TODO:
 
