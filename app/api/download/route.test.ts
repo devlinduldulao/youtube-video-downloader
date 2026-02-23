@@ -374,7 +374,7 @@ describe('/api/download POST', () => {
 
       expect(mockSpawn).toHaveBeenCalledWith(
         expect.any(String), // yt-dlp path
-        ['--get-title', '--no-warnings', '--no-check-certificates', 'https://youtube.com/watch?v=argstest'],
+        ['--get-title', '--no-warnings', '--no-check-certificates', '--no-playlist', 'https://youtube.com/watch?v=argstest'],
       );
     });
 

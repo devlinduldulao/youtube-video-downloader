@@ -445,6 +445,7 @@ describe('/api/video-info POST', () => {
           '--no-warnings',
           '--no-download',
           '--no-check-certificates',
+          '--no-playlist',
           'https://youtube.com/watch?v=args',
         ],
       );

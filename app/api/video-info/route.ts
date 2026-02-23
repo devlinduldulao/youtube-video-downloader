@@ -37,6 +37,7 @@ async function getVideoInfo(url: string): Promise<VideoInfo> {
       '--no-warnings',
       '--no-download',
       '--no-check-certificates',
+      '--no-playlist', // Prevent processing entire playlist when URL has a &list= param
       url
     ]);
 
@@ -54,7 +55,10 @@ async function getVideoInfo(url: string): Promise<VideoInfo> {
     proc.on('close', (code) => {
       if (code === 0) {
         try {
-          const info = JSON.parse(jsonOutput);
+          // yt-dlp may output multiple JSON objects on separate lines (NDJSON)
+          // when a playlist URL is provided. We only want the first valid object.
+          const firstLine = jsonOutput.trim().split('\n')[0];
+          const info = JSON.parse(firstLine);
           
           // Find best video quality available
           const formats = info.formats || [];

@@ -103,6 +103,7 @@ function getVideoTitle(url: string): Promise<string> {
       '--get-title',
       '--no-warnings',
       '--no-check-certificates',
+      '--no-playlist', // Prevent processing entire playlist when URL has a &list= param
       url,
     ]);
 
@@ -117,7 +118,10 @@ function getVideoTitle(url: string): Promise<string> {
     });
     proc.on('close', (code) => {
       if (code === 0) {
-        resolve(title.trim().replace(/[^\w\s-]/g, '') || 'video');
+        // --get-title may output multiple titles with --playlist URLs;
+        // take only the first line to avoid concatenated titles.
+        const firstTitle = title.trim().split('\n')[0];
+        resolve(firstTitle.replace(/[^\w\s-]/g, '') || 'video');
       } else {
         reject(new Error(error || 'Failed to get video title'));
       }
@@ -242,6 +246,7 @@ export async function POST(request: NextRequest) {
               outputTemplate,
               '--no-warnings',
               '--no-check-certificates',
+              '--no-playlist', // Prevent processing entire playlist when URL has a &list= param
               '--progress',
               '--newline', // KEY: outputs progress on separate lines for parsing
             ];
