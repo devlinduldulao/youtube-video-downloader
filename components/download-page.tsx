@@ -4,11 +4,20 @@ import { useState, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { AlertCircle, ArrowRight, Box, Download, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, ArrowRight, Box, Download, CheckCircle2, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { formatDuration, formatViews } from '@/lib/format';
 import { toast } from 'sonner';
 import { ThemeToggle } from '@/components/theme-toggle';
+
+type TranscriptFormat = 'txt' | 'timestamped' | 'srt';
+
+const TRANSCRIPT_FORMATS: { value: TranscriptFormat; label: string }[] = [
+    { value: 'txt', label: 'CLEAN_TEXT' },
+    { value: 'timestamped', label: 'TIMESTAMPED' },
+    { value: 'srt', label: 'SRT' },
+];
 
 interface VideoInfo {
     videoId: string;
@@ -60,6 +69,8 @@ export function DownloadPage() {
     const [downloadStatus, setDownloadStatus] = useState<DownloadStatus | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [progress, setProgress] = useState<DownloadProgress | null>(null);
+    const [transcriptFormat, setTranscriptFormat] = useState<TranscriptFormat>('txt');
+    const [transcriptLoading, setTranscriptLoading] = useState(false);
 
     // AbortController ref lets us cancel the SSE stream if the user
     // navigates away or clicks cancel
@@ -247,27 +258,62 @@ export function DownloadPage() {
         }
     };
 
-    const formatDuration = (seconds: string) => {
-        const sec = parseInt(seconds);
-        const hours = Math.floor(sec / 3600);
-        const minutes = Math.floor((sec % 3600) / 60);
-        const secs = sec % 60;
+    /**
+     * Fetch the video's transcript/captions and save it as a file.
+     *
+     * Unlike the video download (which streams a binary file), the transcript
+     * endpoint returns JSON text. We build a Blob client-side and trigger a
+     * native download so the user gets a .txt or .srt file.
+     */
+    const downloadTranscript = async () => {
+        if (!url.trim()) return;
 
-        if (hours > 0) {
-            return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        }
-        return `${minutes}:${secs.toString().padStart(2, '0')}`;
-    };
+        setTranscriptLoading(true);
+        setError(null);
 
-    const formatViews = (views: string) => {
+        const toastId = toast.loading('Extracting transcript...');
+
         try {
-            const num = parseInt(views);
-            if (isNaN(num)) return '0';
-            if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-            if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-            return views;
-        } catch {
-            return views;
+            const response = await fetch('/api/transcript', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: url.trim(), format: transcriptFormat }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || 'TRANSCRIPT_FAILED');
+            }
+
+            const data = (await response.json()) as {
+                transcript: string;
+                filename: string;
+                language: string;
+                cueCount: number;
+            };
+
+            const mime = transcriptFormat === 'srt' ? 'application/x-subrip' : 'text/plain';
+            const blob = new Blob([data.transcript], { type: `${mime};charset=utf-8` });
+            const objectUrl = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = data.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(objectUrl);
+
+            toast.success('Transcript extracted!', {
+                id: toastId,
+                description: `${data.filename} (${data.cueCount} lines) saved to downloads.`,
+            });
+        } catch (err) {
+            const errorMsg = err instanceof Error ? `TRANSCRIPT_ERROR: ${err.message}` : 'TRANSCRIPT_FAILED';
+            setError(errorMsg);
+            toast.error(errorMsg, { id: toastId });
+        } finally {
+            setTranscriptLoading(false);
         }
     };
 
@@ -569,6 +615,56 @@ export function DownloadPage() {
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
+
+                                    {/* ── Transcript Extraction Section ────────────── */}
+                                    <div className="pt-6 border-t border-border space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs text-muted-foreground tracking-widest">TRANSCRIPT_MODULE</span>
+                                            <FileText className="w-4 h-4 text-muted-foreground" />
+                                        </div>
+
+                                        {/* Format selector */}
+                                        <div className="grid grid-cols-3 gap-1" role="group" aria-label="Transcript format">
+                                            {TRANSCRIPT_FORMATS.map((fmt) => (
+                                                <button
+                                                    key={fmt.value}
+                                                    type="button"
+                                                    onClick={() => setTranscriptFormat(fmt.value)}
+                                                    aria-pressed={transcriptFormat === fmt.value}
+                                                    className={cn(
+                                                        'text-[10px] font-bold uppercase tracking-wider py-2 border transition-colors duration-200',
+                                                        transcriptFormat === fmt.value
+                                                            ? 'bg-[var(--color-brand-lime)] text-black border-[var(--color-brand-lime)]'
+                                                            : 'bg-transparent text-muted-foreground border-border hover:border-[var(--color-brand-lime)]/50'
+                                                    )}
+                                                >
+                                                    {fmt.label}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        <Button
+                                            onClick={downloadTranscript}
+                                            disabled={transcriptLoading}
+                                            className={cn(
+                                                'w-full h-12 text-sm font-bold uppercase tracking-widest transition-all duration-300 rounded-none',
+                                                'bg-transparent border border-[var(--color-brand-lime)] text-[var(--color-brand-lime)] hover:bg-[var(--color-brand-lime)] hover:text-black',
+                                                'disabled:opacity-50 disabled:cursor-not-allowed'
+                                            )}
+                                        >
+                                            {transcriptLoading ? (
+                                                <span className="flex items-center justify-center gap-2">
+                                                    <span className="animate-spin text-lg">❋</span>
+                                                    EXTRACTING_TRANSCRIPT
+                                                </span>
+                                            ) : (
+                                                <span className="flex items-center justify-center gap-2">
+                                                    <FileText className="w-4 h-4" />
+                                                    GET_TRANSCRIPT
+                                                </span>
+                                            )}
+                                        </Button>
+                                    </div>
 
                                     <div className="pt-4 border-t border-border">
                                         <p className="text-[10px] text-muted-foreground leading-relaxed font-mono">

@@ -442,6 +442,164 @@ describe('DownloadPage', () => {
     });
   });
 
+  // ── Transcript extraction flow ───────────────────────────────────────
+  describe('transcript extraction', () => {
+    async function setupWithVideoInfo() {
+      const user = userEvent.setup();
+      mockFetchInfoSuccess();
+
+      render(<DownloadPage />);
+
+      await user.type(
+        screen.getByPlaceholderText('INPUT_SOURCE_URL'),
+        'https://youtube.com/watch?v=dQw4w9WgXcQ',
+      );
+      await user.click(screen.getByText('INITIALIZE'));
+
+      await waitFor(() => {
+        expect(screen.getByText('GET_TRANSCRIPT')).toBeInTheDocument();
+      });
+
+      return user;
+    }
+
+    function mockTranscriptSuccess(overrides: Record<string, unknown> = {}) {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            transcript: '# My Video\n\nHello world\nThis is a transcript\n',
+            filename: 'My Video.en.txt',
+            language: 'en',
+            format: 'txt',
+            cueCount: 2,
+            ...overrides,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+    }
+
+    it('renders the transcript module after info is loaded', async () => {
+      await setupWithVideoInfo();
+      expect(screen.getByText('TRANSCRIPT_MODULE')).toBeInTheDocument();
+      expect(screen.getByText('GET_TRANSCRIPT')).toBeInTheDocument();
+      expect(screen.getByText('CLEAN_TEXT')).toBeInTheDocument();
+      expect(screen.getByText('TIMESTAMPED')).toBeInTheDocument();
+      expect(screen.getByText('SRT')).toBeInTheDocument();
+    });
+
+    it('downloads the transcript and shows a success toast', async () => {
+      const user = await setupWithVideoInfo();
+      mockTranscriptSuccess();
+
+      await user.click(screen.getByText('GET_TRANSCRIPT'));
+
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledWith(
+          '/api/transcript',
+          expect.objectContaining({
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
+              format: 'txt',
+            }),
+          }),
+        );
+      });
+
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith(
+          'Transcript extracted!',
+          expect.objectContaining({ id: 'toast-id' }),
+        );
+      });
+
+      // A blob URL was created for the download.
+      expect(window.URL.createObjectURL).toHaveBeenCalled();
+    });
+
+    it('sends the selected format (srt) in the request', async () => {
+      const user = await setupWithVideoInfo();
+
+      await user.click(screen.getByText('SRT'));
+      mockTranscriptSuccess({ format: 'srt', filename: 'My Video.en.srt' });
+
+      await user.click(screen.getByText('GET_TRANSCRIPT'));
+
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledWith(
+          '/api/transcript',
+          expect.objectContaining({
+            body: JSON.stringify({
+              url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
+              format: 'srt',
+            }),
+          }),
+        );
+      });
+    });
+
+    it('marks the selected format button as pressed', async () => {
+      const user = await setupWithVideoInfo();
+
+      const srtBtn = screen.getByText('SRT');
+      await user.click(srtBtn);
+
+      expect(srtBtn).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByText('CLEAN_TEXT')).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('shows an error when the transcript is unavailable', async () => {
+      const user = await setupWithVideoInfo();
+
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'NO_TRANSCRIPT_AVAILABLE' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      await user.click(screen.getByText('GET_TRANSCRIPT'));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/TRANSCRIPT_ERROR: NO_TRANSCRIPT_AVAILABLE/),
+        ).toBeInTheDocument();
+      });
+      expect(toast.error).toHaveBeenCalled();
+    });
+
+    it('shows EXTRACTING_TRANSCRIPT while the request is in flight', async () => {
+      const user = await setupWithVideoInfo();
+
+      let resolveReq: (value: Response) => void;
+      fetchSpy.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveReq = resolve;
+        }),
+      );
+
+      await user.click(screen.getByText('GET_TRANSCRIPT'));
+
+      expect(screen.getByText('EXTRACTING_TRANSCRIPT')).toBeInTheDocument();
+
+      // Clean up the pending request.
+      resolveReq!(
+        new Response(
+          JSON.stringify({
+            transcript: 'x\n',
+            filename: 'a.txt',
+            language: 'en',
+            format: 'txt',
+            cueCount: 1,
+          }),
+          { status: 200 },
+        ),
+      );
+    });
+  });
+
   // ── Edge cases ───────────────────────────────────────────────────────
   describe('edge cases', () => {
     it('should clear previous error when a new fetch is initiated', async () => {

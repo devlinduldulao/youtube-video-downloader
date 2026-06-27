@@ -1,47 +1,13 @@
 import { describe, it, expect } from 'vitest';
+import { formatDuration, formatViews } from './format';
 
 /**
- * Tests for the inline formatting helper functions used in the DownloadPage.
+ * Tests for the shared formatting helpers used in the DownloadPage.
  *
- * These functions live INSIDE the DownloadPage component, so they aren't
- * directly importable.  We re-implement them here to test the logic in
- * isolation.  This is a common pattern when logic is embedded in a
- * component — ideally you'd extract these into a `lib/format.ts` file
- * for reuse and testability, but testing them directly is also valid.
- *
- * Why extract and test separately?
- *   - Easier to test edge cases (negative numbers, NaN, huge values)
- *   - Faster tests (no React rendering overhead)
- *   - Encourages single-responsibility: formatting ≠ rendering
- *
- * Best practice: If these tests pass, consider moving the functions
- * to `lib/format.ts` and importing them into the component.
+ * These functions were extracted from the component into `lib/format.ts`
+ * so they can be imported and tested in isolation — no React rendering
+ * overhead, and edge cases (NaN, huge values) are easy to cover.
  */
-
-// ── Re-implementations matching DownloadPage source code ──────────────
-function formatDuration(seconds: string): string {
-  const sec = parseInt(seconds);
-  const hours = Math.floor(sec / 3600);
-  const minutes = Math.floor((sec % 3600) / 60);
-  const secs = sec % 60;
-
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  }
-  return `${minutes}:${secs.toString().padStart(2, '0')}`;
-}
-
-function formatViews(views: string): string {
-  try {
-    const num = parseInt(views);
-    if (isNaN(num)) return '0';
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-    return views;
-  } catch {
-    return views;
-  }
-}
 
 describe('formatDuration', () => {
   describe('seconds only', () => {

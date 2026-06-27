@@ -6,9 +6,10 @@ A modern YouTube video downloader built with Next.js 16, featuring real-time dow
 
 - 🎯 **Smart Quality Selection** — downloads best available video + audio, merged into MP4
 - 📊 **Real-time Progress** — live speed, ETA, and phase tracking via Server-Sent Events
+- 📝 **Transcript Download** — extract captions as clean text, timestamped text, or SRT (auto-generated captions are de-duplicated into readable prose)
 - 🖥️ **Cross-platform** — works on macOS (Intel + Apple Silicon), Windows, and Linux
 - 🔧 **Zero ffmpeg config** — bundled automatically via `@ffmpeg-installer/ffmpeg`
-- 🧪 **Fully Tested** — 114 unit tests, all passing
+- 🧪 **Fully Tested** — 183 unit tests, all passing
 - 🎨 **Cyberpunk UI** — Framer Motion animations, dark/light theme
 - 🔒 **Type-Safe** — TypeScript throughout
 
@@ -136,7 +137,7 @@ npm test              # Watch mode
 npm run test:coverage # Coverage report
 ```
 
-**Results:** ✅ 114 tests passing across 7 test files
+**Results:** ✅ 183 tests passing across 9 test files
 
 ---
 
@@ -161,6 +162,7 @@ npm run test:coverage # Coverage report
 | `/api/video-info` | POST | Fetch video metadata (title, thumbnail, quality) |
 | `/api/download-progress` | POST | SSE stream with real-time download progress |
 | `/api/download-file` | GET | Serve the completed file to the browser |
+| `/api/transcript` | POST | Extract captions/transcript (`format`: `txt` \| `timestamped` \| `srt`, optional `lang`) |
 | `/api/download` | POST | Legacy: single-request download (no progress) |
 
 ### TODO:
